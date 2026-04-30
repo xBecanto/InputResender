@@ -3,6 +3,8 @@ using Components.Interfaces;
 using Components.Interfaces.Commands;
 using Components.Interfaces.SeClav;
 using Components.Library;
+using InputResender.Commands;
+using InputResender.Services;
 using SeClav;
 using System;
 using System.Collections.Generic;
@@ -24,7 +26,10 @@ public class PerformanceTestCommand : DCommand<DMainAppCore> {
 		("emulated-roundtrip", null),
 		("scl-startup", null),
 		("scl-throughput", null),
+		("net-receiver", null),
+		("net-sender", null),
 	];
+
 
 	public PerformanceTestCommand ( DMainAppCore owner, string parentDsc = null )
 		: base ( owner, parentDsc, CommandNames, InterCommands ) { }
@@ -37,6 +42,8 @@ public class PerformanceTestCommand : DCommand<DMainAppCore> {
 			"emulated-roundtrip"  => CallName + " emulated-roundtrip [count]: Full mock roundtrip via pipeline system: DInputReader->DInputMerger->DInputProcessor->DDataSigner->DPacketSender (MPacketSender loopback)->DDataSigner->DInputSimulator\n\tcount: Repetitions (default 50)",
 			"scl-startup"         => CallName + " scl-startup [count]: SCL: create runtime + assign @in vars + execute + read @out vars per iteration\n\tcount: Repetitions (default 50)",
 			"scl-throughput"      => CallName + " scl-throughput [count]: SCL: execute a 5-state FSM script (each state: 10 ADD + 5 COMPARE, loops 11× before advancing)\n\tcount: Repetitions (default 50)",
+			"net-receiver"        => CallName + " net-receiver: Real roundtrip RECEIVER — sets up 3 pipelines (receive/decrypt/simulate, capture/merge/process, process/encrypt/send) and prints listening IPs. Stays alive until process exits.",
+			"net-sender"          => CallName + " net-sender <ip:port> [count]: Real roundtrip SENDER — connects to receiver, measures per-iteration latency\n\tip:port: Target receiver address (e.g. 192.168.1.1:45256)\n\tcount: Repetitions (default 10). Stats: avg, median, worst 1%.",
 			_                     => Help
 		}, out var helpRes ) ) return helpRes;
 
@@ -51,6 +58,8 @@ public class PerformanceTestCommand : DCommand<DMainAppCore> {
 			"emulated-roundtrip" => RunEmulatedRoundtrip ( context, count ),
 			"scl-startup"        => RunSclStartup ( context, count ),
 			"scl-throughput"     => RunSclThroughput ( context, count ),
+			"net-receiver"       => RunNetReceiver ( context ),
+			"net-sender"         => RunNetSender ( context ),
 			_ => new CommandResult ( $"Unknown subcommand '{context.SubAction}'." )
 		};
 	}
@@ -83,6 +92,7 @@ public class PerformanceTestCommand : DCommand<DMainAppCore> {
 	}
 
 	private CommandResult RunSimPipeline ( CommandProcessor<DMainAppCore>.CmdContext context, int count, bool useReal ) {
+		// Doesn't actually execute pipelines, just emulates that by manually calling the components
 		int total = count * 2;
 		int processed = 0;
 		CountdownEvent countdown = useReal ? new CountdownEvent ( total ) : null;
@@ -161,6 +171,7 @@ public class PerformanceTestCommand : DCommand<DMainAppCore> {
 	}
 
 	private CommandResult RunEmulatedRoundtrip ( CommandProcessor<DMainAppCore>.CmdContext context, int count ) {
+		// Doesn't perform full round-trip, only processing. Needs to go all the way through MPacketSender
 		int total = count * 2;
 		int received = 0;
 
@@ -354,5 +365,105 @@ public class PerformanceTestCommand : DCommand<DMainAppCore> {
 		string msg = $"[perf/{testName}] N={simulated} Captured={captured} | Total={elapsedMs}ms Avg={avgUs:F2}µs Throughput={eps:F0} ev/s";
 		if ( extra != null ) msg += $" [{extra}]";
 		return new CommandResult ( msg );
+	}
+
+	private CommandResult RunNetReceiver ( CommandProcessor<DMainAppCore>.CmdContext context ) {
+		var sb = new StringBuilder ();
+		// Set up the active core via commands: load joiners, set password, register echo pipeline, wire recv callback, print IPs.
+		foreach ( var cmd in new[] {
+			"load joiners",
+			"core new comp mlowlevelinput",
+			"core new comp vpacketsender",
+			"hook manager start",
+			"hook add fast Pipeline KeyDown KeyUp",
+			"password add perf-roundtrip",
+			"pipeline new perf-recv NetworkCallbacks DDataSigner DInputSimulator DInputSimulator",
+			"pipeline new perf-process DInputReader DInputMerger DInputProcessor",
+			"pipeline new perf-send DInputProcessor DDataSigner DPacketSender",
+			"network callback recv pipeline",
+			"network hostlist",
+		} ) {
+			var res = context.CmdProc.ProcessLine ( cmd );
+			if ( !string.IsNullOrWhiteSpace ( res?.Message ) )
+				sb.AppendLine ( res.Message.TrimEnd () );
+		}
+		sb.AppendLine ( "Core state was altered, please restart after the test is finished." );
+		return new CommandResult ( sb.ToString ().TrimEnd () );
+	}
+
+	private CommandResult RunNetSender ( CommandProcessor<DMainAppCore>.CmdContext context ) {
+		string targetAddr = context.Args.String ( context.ArgID + 1, "ip:port", 8, true );
+		if ( string.IsNullOrWhiteSpace ( targetAddr ) )
+			return new CommandResult ( "[perf/net-sender] Missing <ip:port>. Usage: perf net-sender <ip:port> [count]" );
+		int count = context.Args.Int ( context.ArgID + 2, "count", true ) ?? 4;
+
+		VRoundtripTrigger roundtripTrigger = new (context.CmdProc.Owner);
+
+		foreach ( var cmd in new[] {
+			"load joiners",
+			"core new comp mlowlevelinput",
+			"core new comp vpacketsender",
+			"hook manager start",
+			"hook add fast Pipeline KeyDown KeyUp",
+			"password add perf-roundtrip",
+			"pipeline new perf-sim DRoundtripTrigger DInputSimulator DInputSimulator",
+			"pipeline new perf-capture DInputReader DInputMerger DInputProcessor",
+			"pipeline new perf-send DInputProcessor DDataSigner DPacketSender",
+			"pipeline new perf-recv NetworkCallbacks DDataSigner DInputSimulator DRoundtripTrigger",
+			$"target set {targetAddr}",
+		} ) context.CmdProc.ProcessLine ( cmd );
+
+		var core = context.CmdProc.GetVar<DMainAppCore> ( CoreManagerCommand<DMainAppCore>.ActiveCoreVarName );
+		if (core == null)
+			throw new InvalidOperationException ( "[perf/net-sender] Active core not found in command processor." );
+		var sender = core.Fetch<DPacketSender> ();
+		var reader = core.Fetch<DInputReader> ();
+		if ( sender == null || reader == null )
+			return new CommandResult ( "[perf/net-sender] Required components (DPacketSender or DInputReader) not found in active core." );
+
+		InputData testDataDown = new (this, KeyCode.A, true);
+		InputData testDataUp = new (this, KeyCode.A, false);
+		//var hookInfo = new HHookInfo ( reader, 0, VKChange.KeyDown );
+		//var testEvent = new HKeyboardEventDataHolder ( reader, hookInfo, (int)KeyCode.A, VKChange.KeyDown );
+		var ackSignal = new ManualResetEventSlim ( false );
+		DPacketSender.OnReceiveHandler ackHandler = ( _, __ ) => { ackSignal.Set (); return DPacketSender.CallbackResult.None; };
+		sender.OnReceive += ackHandler;
+
+		var timesMs = new List<double> ( count );
+		try {
+			for ( int i = 0; i < count; i++ ) {
+				ackSignal.Reset ();
+				long t0 = Stopwatch.GetTimestamp ();
+				DComponentJoiner.TrySend ( reader, null, i % 2 == 0 ? testDataDown : testDataUp );
+				bool received = ackSignal.Wait ( TimeSpan.FromSeconds ( 10 ) );
+				double ms = (Stopwatch.GetTimestamp () - t0) * 1000.0 / Stopwatch.Frequency;
+				timesMs.Add ( received ? ms : -1.0 );
+			}
+		} finally {
+			sender.OnReceive -= ackHandler;
+			ackSignal.Dispose ();
+		}
+
+		var result = FormatNetRoundtripResult ( "net-sender", count, timesMs );
+		return new CommandResult ( result.Message + "\nCore state was altered, please restart." );
+	}
+
+	private static CommandResult FormatNetRoundtripResult ( string testName, int total, List<double> timesMs ) {
+		var received = timesMs.Where ( t => t >= 0 ).OrderBy ( t => t ).ToList ();
+		int timeouts = total - received.Count;
+		if ( received.Count == 0 )
+			return new CommandResult ( $"[perf/{testName}] All {total} iterations timed out." );
+
+		double avg = received.Average ();
+		double median = received.Count % 2 == 1
+			? received[received.Count / 2]
+			: (received[received.Count / 2 - 1] + received[received.Count / 2]) / 2.0;
+		int worst1pctCount = Math.Max ( 1, received.Count / 100 );
+		double worst1pct = received.Skip ( received.Count - worst1pctCount ).Average ();
+
+		string timeoutStr = timeouts > 0 ? $" Timeouts={timeouts}" : "";
+		return new CommandResult (
+			$"[perf/{testName}] N={received.Count}/{total}{timeoutStr} | Avg={avg:F2}ms Median={median:F2}ms Worst1%={worst1pct:F2}ms"
+		);
 	}
 }

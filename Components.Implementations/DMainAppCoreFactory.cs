@@ -128,5 +128,12 @@ public class DMainAppCoreFactory {
 			int sim = simulator.Simulate ( simulator.ParseCommand ( data ) );
 			return (sim != 0, sim);
 		});
+
+		// Joiner 1: DRoundtripTrigger feeds input events into InputSimulator (net-sender pipeline start)
+		DComponentJoiner.TryRegisterJoiner<DRoundtripTrigger, DInputSimulator, InputData> ( compJoiner,
+			( joiner, simulator, data ) => (true, simulator.ParseCommand ( data )) );
+		// Joiner 2: InputSimulator output arrives back at DRoundtripTrigger (net-sender pipeline end, signals completion)
+		DComponentJoiner.TryRegisterJoiner<DInputSimulator, DRoundtripTrigger, HInputEventDataHolder[]> ( compJoiner,
+			( joiner, trigger, events ) => { trigger.OnBatchReceived ( events ); return (true, null); } );
 	}
 }
