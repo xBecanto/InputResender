@@ -53,8 +53,9 @@ namespace Components.Interfaces {
 			var innerData = data.Data;
 			var values = (HInputData_Mock.IInputStruct_Mock)innerData;
 			var changeCode = GetChangeCode ( values.KeyChange );
-			var vkRef = values.VKCode.ToUnmanaged ();
-			RaiseEvent ( values.HookID, nCode, changeCode, vkRef );
+			//var vkRef = values.VKCode.ToUnmanaged ();
+			//RaiseEvent ( values.HookID, nCode, changeCode, vkRef );
+			values.VKCode.ExecInUnmanaged ( vkRef => RaiseEvent ( values.HookID, nCode, changeCode, vkRef ) );
 			return true;
 		}
 

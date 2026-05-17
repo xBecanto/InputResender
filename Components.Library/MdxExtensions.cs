@@ -48,6 +48,14 @@ public static class MdxExtensions {
 		Marshal.Copy ( bAr, 0, ptr, bAr.Length );
 		return ptr;
 	}
+
+	public static void FreeUnmanaged ( this IntPtr value ) => Marshal.FreeHGlobal ( value );
+
+	public static void ExecInUnmanaged ( this IntPtr value, System.Action<IntPtr> action ) {
+		IntPtr ptr = value.ToUnmanaged ();
+		action?.Invoke ( ptr );
+		ptr.FreeUnmanaged ();
+	}
 	public static bool IsModifier ( this KeyCode key ) => (int)(key & KeyCode.Modifiers) > 1;
 	public static bool TryGetValue<T, U> ( this Dictionary<T, U> dict, Func<T, bool> predicate, out U val ) {
 		foreach ( var item in dict ) {
