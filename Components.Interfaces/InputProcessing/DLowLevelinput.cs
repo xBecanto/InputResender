@@ -138,8 +138,8 @@ namespace Components.Interfaces {
 			//if ( ProbeHook.processing ) return;
 			LLInputLogger.Log ( IntPtr.Zero, 'N', $"New notification: {sender}, n={nCode}, change={vkChngCode}, extra={extras} (wParamX={vkChngCode:X}), extraX={extras:X})" );
 			lock ( Probes ) {
-				NotificationLog.Add ( (notificationID, sender, nCode, vkChngCode, vkCode) );
-				notificationID++;
+				//NotificationLog.Add ( (notificationID, sender, nCode, vkChngCode, vkCode) );
+				//notificationID++;
 				foreach ( var probe in Probes ) {
 					if ( probe == sender ) {
 						LLInputLogger.Log ( IntPtr.Zero, 'N', $"Skipping probe {probe} as it is sender" );

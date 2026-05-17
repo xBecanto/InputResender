@@ -22,6 +22,7 @@ public class PerformanceTestCommand : DCommand<DMainAppCore> {
 	private static List<(string, Type)> InterCommands = [
 		("sim-hook", null),
 		("sim-pipeline", null),
+		("sim-pipeline-direct", null),
 		("cmd-hook", null),
 		("emulated-roundtrip", null),
 		("scl-startup", null),
@@ -36,10 +37,11 @@ public class PerformanceTestCommand : DCommand<DMainAppCore> {
 
 	protected override CommandResult ExecIner ( CommandProcessor<DMainAppCore>.CmdContext context ) {
 		if ( TryPrintHelp ( context.Args, context.ArgID + 1, () => context.SubAction switch {
-			"sim-hook"            => CallName + " sim-hook [count] [--real]: Direct: simulate input and capture via basic hook\n\tcount: Repetitions (default 50)\n\t--real: Use VWinLowLevelLibs instead of MLowLevelInput",
-			"sim-pipeline"        => CallName + " sim-pipeline [count] [--real]: Direct: simulate input through DInputReader->DInputMerger->DInputProcessor\n\tcount: Repetitions (default 50)\n\t--real: Use VWinLowLevelLibs instead of MLowLevelInput",
-			"cmd-hook"            => CallName + " cmd-hook [count] [--real]: Command: simulate via 'sim' commands and capture in SHookManager\n\tcount: Repetitions (default 50)\n\t--real: Use VWinLowLevelLibs instead of MLowLevelInput\n\tNote: VInputSimulator.SimulateDelay is set to -1 for this test.",
-			"emulated-roundtrip"  => CallName + " emulated-roundtrip [count]: Full mock roundtrip via pipeline system: DInputReader->DInputMerger->DInputProcessor->DDataSigner->DPacketSender (MPacketSender loopback)->DDataSigner->DInputSimulator\n\tcount: Repetitions (default 50)",
+			"sim-hook"              => CallName + " sim-hook [count] [--real]: Direct: simulate input and capture via basic hook\n\tcount: Repetitions (default 50)\n\t--real: Use VWinLowLevelLibs instead of MLowLevelInput",
+			"sim-pipeline"         => CallName + " sim-pipeline [count]: Pipeline: simulate input through the DComponentJoiner pipeline system (DInputReader->DInputMerger->DInputProcessor)\n\tcount: Repetitions (default 50)",
+			"sim-pipeline-direct"  => CallName + " sim-pipeline-direct [count] [--real]: Direct: simulate input through DInputReader->DInputMerger->DInputProcessor (components called directly, no pipeline system)\n\tcount: Repetitions (default 50)\n\t--real: Use VWinLowLevelLibs instead of MLowLevelInput",
+			"cmd-hook"             => CallName + " cmd-hook [count] [--real]: Command: simulate via 'sim' commands and capture in SHookManager\n\tcount: Repetitions (default 50)\n\t--real: Use VWinLowLevelLibs instead of MLowLevelInput\n\tNote: VInputSimulator.SimulateDelay is set to -1 for this test.",
+			"emulated-roundtrip"   => CallName + " emulated-roundtrip [count]: Full mock roundtrip via pipeline system: DInputReader->DInputMerger->DInputProcessor->DDataSigner->DPacketSender (MPacketSender loopback)->DDataSigner->DInputSimulator\n\tcount: Repetitions (default 50)",
 			"scl-startup"         => CallName + " scl-startup [count]: SCL: create runtime + assign @in vars + execute + read @out vars per iteration\n\tcount: Repetitions (default 50)",
 			"scl-throughput"      => CallName + " scl-throughput [count]: SCL: execute a 5-state FSM script (each state: 10 ADD + 5 COMPARE, loops 11× before advancing)\n\tcount: Repetitions (default 50)",
 			"net-receiver"        => CallName + " net-receiver: Real roundtrip RECEIVER — sets up 3 pipelines (receive/decrypt/simulate, capture/merge/process, process/encrypt/send) and prints listening IPs. Stays alive until process exits.",
@@ -51,10 +53,12 @@ public class PerformanceTestCommand : DCommand<DMainAppCore> {
 		int count = context.Args.Int ( context.ArgID + 1, "count", true ) ?? 50;
 		bool useReal = context.Args.Present ( "--real" );
 
+		LLInputLogger.AllowLogging = false;
 		return context.SubAction switch {
-			"sim-hook"           => RunSimHook ( context, count, useReal ),
-			"sim-pipeline"       => RunSimPipeline ( context, count, useReal ),
-			"cmd-hook"           => RunCmdHook ( context, count, useReal ),
+			"sim-hook"              => RunSimHook ( context, count, useReal ),
+			"sim-pipeline"         => RunSimPipeline ( context, count ),
+			"sim-pipeline-direct"  => RunSimPipelineDirect ( context, count, useReal ),
+			"cmd-hook"             => RunCmdHook ( context, count, useReal ),
 			"emulated-roundtrip" => RunEmulatedRoundtrip ( context, count ),
 			"scl-startup"        => RunSclStartup ( context, count ),
 			"scl-throughput"     => RunSclThroughput ( context, count ),
@@ -91,7 +95,7 @@ public class PerformanceTestCommand : DCommand<DMainAppCore> {
 		return FormatResult ( "sim-hook", total, captured, sw.ElapsedMilliseconds, completed ? null : "TIMEOUT" );
 	}
 
-	private CommandResult RunSimPipeline ( CommandProcessor<DMainAppCore>.CmdContext context, int count, bool useReal ) {
+	private CommandResult RunSimPipelineDirect ( CommandProcessor<DMainAppCore>.CmdContext context, int count, bool useReal ) {
 		// Doesn't actually execute pipelines, just emulates that by manually calling the components
 		int total = count * 2;
 		int processed = 0;
@@ -123,7 +127,43 @@ public class PerformanceTestCommand : DCommand<DMainAppCore> {
 		sw.Stop ();
 		reader.Clear ();
 		countdown?.Dispose ();
-		return FormatResult ( "sim-pipeline", total, processed, sw.ElapsedMilliseconds, completed ? null : "TIMEOUT" );
+		return FormatResult ( "sim-pipeline-direct", total, processed, sw.ElapsedMilliseconds, completed ? null : "TIMEOUT" );
+	}
+
+	private CommandResult RunSimPipeline ( CommandProcessor<DMainAppCore>.CmdContext context, int count ) {
+		int total = count * 2;
+		int processed = 0;
+
+		var selector = DMainAppCore.CompSelect.LLInput | DMainAppCore.CompSelect.InputReader
+			| DMainAppCore.CompSelect.InputMerger | DMainAppCore.CompSelect.InputProcessor
+			| DMainAppCore.CompSelect.ComponentJoiner;
+		var testCore = new DMainAppCoreFactory { PreferMocks = true }.CreateVMainAppCore ( selector );
+
+		var reader = testCore.Fetch<DInputReader> ();
+		var joiner = testCore.Fetch<DComponentJoiner> ();
+
+		DMainAppCoreFactory.AddJoiners ( testCore );
+		joiner.RegisterPipeline (
+			new ComponentSelector ( componentType: typeof ( DInputReader ) ),
+			new ComponentSelector ( componentType: typeof ( DInputMerger ) ),
+			new ComponentSelector ( componentType: typeof ( DInputProcessor ) ) );
+
+		var hookInfo = new HHookInfo ( reader, 0, VKChange.KeyDown, VKChange.KeyUp );
+		var hookKeys = reader.SetupHook ( hookInfo, ( _, e ) => {
+			int steps = DComponentJoiner.TrySend ( reader, null, e );
+			if ( steps > 0 ) Interlocked.Increment ( ref processed );
+			return true;
+		}, null );
+		foreach ( var kvp in hookKeys ) hookInfo.AddHookID ( kvp.Value, kvp.Key );
+
+		var sw = Stopwatch.StartNew ();
+		for ( int i = 0; i < count; i++ ) {
+			reader.SimulateInput ( new HKeyboardEventDataHolder ( reader, hookInfo, (int)KeyCode.A, VKChange.KeyDown ), true );
+			reader.SimulateInput ( new HKeyboardEventDataHolder ( reader, hookInfo, (int)KeyCode.A, VKChange.KeyUp ), true );
+		}
+		sw.Stop ();
+		reader.Clear ();
+		return FormatResult ( "sim-pipeline", total, processed, sw.ElapsedMilliseconds );
 	}
 
 	private CommandResult RunCmdHook ( CommandProcessor<DMainAppCore>.CmdContext context, int count, bool useReal ) {
@@ -171,7 +211,6 @@ public class PerformanceTestCommand : DCommand<DMainAppCore> {
 	}
 
 	private CommandResult RunEmulatedRoundtrip ( CommandProcessor<DMainAppCore>.CmdContext context, int count ) {
-		// Doesn't perform full round-trip, only processing. Needs to go all the way through MPacketSender
 		int total = count * 2;
 		int received = 0;
 

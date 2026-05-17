@@ -127,11 +127,12 @@ public static class LLInputLogger {
 
 	public static nint[] keywordIDs = { 0, 42, 69, 420, 1337, 666, 1234, 7734 };
 
-	//[System.Diagnostics.Conditional ( "STORE_LL_LOGS" )]
+	public static bool AllowLogging = true;
 	/// <summary>To be used only for debbugging purposes, when you want to log the LL events.
 	/// <para>To enable logging, use '#define STORE_LL_LOGS' in the project file.</para>
+	[System.Diagnostics.Conditional ( "STORE_LL_LOGS" )]
 	public static void Log ( nint hook, char identifier, string msg ) {
-		if ( msg == null ) return;
+		if ( msg == null || !AllowLogging ) return;
 
 		if ( keywordIDs.Contains ( hook ) )  LLInputLogger.SystemMsg ( msg, identifier );
 		else LLInputLogger.Msg ( hook, identifier, msg );
