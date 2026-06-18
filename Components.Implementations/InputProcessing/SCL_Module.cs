@@ -414,10 +414,14 @@ namespace Components.Implementations;
 			ret.Add ( $"COMPARE_INT SettingChanged 0" );
 			ret.Add ( "?> emit n" );
 			ret.Add ( "COMPARE_KEYS_3 sip_status DotKey DashKey DelimiterKey" );
+			ret.Add ( "ConsumeEvent = 0" );
+			if ( !string.IsNullOrWhiteSpace(NextE) ) ret.Add ( "?A ConsumeEvent = 1" );
 			if ( !string.IsNullOrWhiteSpace(NextE) ) ret.Add ( "?A emit e; wait" );
+			if ( !string.IsNullOrWhiteSpace(NextT) ) ret.Add ( "?B ConsumeEvent = 1" );
 			if ( !string.IsNullOrWhiteSpace(NextT) ) ret.Add ( "?B emit t; wait" );
+			ret.Add ( $"?C ConsumeEvent = 1" );
 			ret.Add ( $"?C FIRE_KEY sip_status \"{KeyCode}\" 2" ); // Delimiter, i.e. finish processing
-			ret.Add ( "?C emit n; wait" ); // Key fired, finish and jump to start
+			ret.Add ( "?C emit n; wait" );                         // Key fired, finish and jump to start
 			return ret.ToArray ();
 		}
 	}

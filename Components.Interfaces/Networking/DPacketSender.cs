@@ -35,14 +35,14 @@ namespace Components.Interfaces {
 		public abstract IReadOnlyCollection<(string msg, Exception e)> Errors { get; }
 		public abstract int Connections { get; }
 		public abstract INetPoint OwnEP ( int TTL, int network );
-		public abstract void Connect ( INetPoint ep );
+		public abstract void Connect ( INetPoint ep, bool canReconnect = false );
 		public abstract void Disconnect ( INetPoint ep );
 		public abstract void Send ( HMessageHolder data );
 		/// <summary>Direct receive</summary>
 		public abstract void Recv ( NetMessagePacket data );
 		/// <summary>List of all recv handlers. Will be iterated from newest to oldest. (NetPacket data, was procesed)=>CallbackResult</summary>
 		public abstract event OnReceiveHandler OnReceive;
-		public abstract event Action<NetworkConnection> OnNewConn;
+		public abstract event Action<NetworkConnection, INetPoint> OnNewConn;
 		public override void Clear () => Destroy ();
 		public abstract void Destroy ();
 		public abstract bool IsEPConnected ( INetPoint ep );

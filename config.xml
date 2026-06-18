@@ -1,8 +1,8 @@
-pEmm57UeL1P1En0RTedbQwKdi/jy1Oe4BsEVPwCyXTk=
+91Q6ntol5zK2GgPoVIlTZFduoA2QBRDRdGwiph0VO+k=
 <Config>
   <AutostartName>initCmds</AutostartName>
   <PrintAutoCommands>T</PrintAutoCommands>
-  <MaxOnelinerLength>165</MaxOnelinerLength>
+  <MaxOnelinerLength>125</MaxOnelinerLength>
   <ResponsePrintFormat>Normal</ResponsePrintFormat>
   <AutoCommands>
     <initCmds>
@@ -39,28 +39,55 @@ pEmm57UeL1P1En0RTedbQwKdi/jy1Oe4BsEVPwCyXTk=
       <Sh5>load sclModules</Sh5>
       <Sh6>load joiners</Sh6>
       <Sh7>SIP force</Sh7>
+      <Sh8>SIP safemode on</Sh8>
     </Shared>
     <Client>
       <Cl0>auto run Shared</Cl0>
-      <Cl1>pipeline new Recver NetworkCallbacks DDataSigner DInputSimulator exact=SHookManager</Cl1>
+      <Cl1>pipeline new Recver NetworkCallbacks DDataSigner DInputSimulator DInputSimulator</Cl1>
       <Cl2>network callback recv pipeline</Cl2>
       <Cl3>password add blue</Cl3>
       <Cl4>network hostlist</Cl4>
+      <Cl5>sim recapture False</Cl5>
     </Client>
     <ServerPrep>
       <Se0>auto run Shared</Se0>
-      <Se1>pipeline new ReadInputAndProcess DInputReader DInputMerger VScriptedInputProcessor</Se1>
+      <Se1>pipeline new ReadInputAndProcess exact=SHookManager DInputMerger VScriptedInputProcessor origin</Se1>
       <Se2>pipeline new Sender DInputProcessor DDataSigner DPacketSender</Se2>
-      <Se3>fm whitelist MorseCode.scl XAM5z0P9X1MwRmYLHQI/yP6MM5lB2StteLqaCWAAfwA=</Se3>
+      <Se3>fm whitelist MorseCode.scl 1N3URJL0I5qYM/BdMS9gPXDgd6pSllufo6u9vh6NijI=</Se3>
       <Se4>seclav parse MorseCode.scl</Se4>
       <Se5>SIP assign MorseCode.scl</Se5>
     </ServerPrep>
     <Server>
       <Se5>auto run ServerPrep</Se5>
       <Se6>password add blue</Se6>
-      <Se7>target set 192.168.72.12:45256</Se7>
+      <Se7>target set 192.168.72.18:45256</Se7>
       <Se8>hook add fast Pipeline KeyDown KeyUp</Se8>
     </Server>
+    <ServerZT>
+      <Se5>auto run ServerPrep</Se5>
+      <Se6>password add blue</Se6>
+      <Se7>target set 172.29.79.122:45256 -p=16</Se7>
+      <Se8>hook add fast Pipeline KeyDown KeyUp</Se8>
+      <Se9>blazor start</Se9>
+    </ServerZT>
+    <MorseLocal>
+      <Se0>auto run Shared</Se0>
+      <Se1>pipeline new ReadInputAndProcess exact=SHookManager DInputMerger VScriptedInputProcessor origin</Se1>
+      <Se2>pipeline new LocalCallback DInputProcessor DInputSimulator DInputSimulator</Se2>
+      <Se3>fm whitelist MorseCode.scl 1N3URJL0I5qYM/BdMS9gPXDgd6pSllufo6u9vh6NijI=</Se3>
+      <Se4>seclav parse MorseCode.scl</Se4>
+      <Se5>hook add fast Pipeline KeyDown KeyUp</Se5>
+      <Se6>SIP assign MorseCode.scl</Se6>
+    </MorseLocal>
+    <Selective>
+      <Se0>auto run ServerPrep</Se0>
+      <Se2>fm whitelist Passthrough.scl pYZrIkG4tWCfM/kQ+EHRHWonOqOmXztFDLIiYt4PLu4=</Se2>
+      <Se3>seclav parse Passthrough.scl</Se3>
+      <Se4>SIP assign Passthrough.scl</Se4>
+      <Se6>password add blue</Se6>
+      <Se7>target set 192.168.72.12:45256</Se7>
+      <Se8>hook add fast Pipeline KeyDown KeyUp</Se8>
+    </Selective>
     <externClipboard>
       <ec0>fm whitelist InputResender.ExternalExtensions.dll 3NVdPEy9AHI/R+ATG9aLtdXak13KgW8FiElkXLzq81k=</ec0>
       <ec1>externals load InputResender.ExternalExtensions.dll ExternalClipboardLoader</ec1>
@@ -112,74 +139,5 @@ pEmm57UeL1P1En0RTedbQwKdi/jy1Oe4BsEVPwCyXTk=
       <tr5>pipeline new ReadInputAndProcess exact=SHookManager DInputMerger VTapperInput origin</tr5>
       <tr6>hook add Fast Pipeline Keydown KeyUp</tr6>
     </tapperRun>
-    <Perf>
-      <ph00>perf sim-hook count=100</ph00>
-      <ph01>perf sim-hook count=200</ph01>
-      <ph02>perf sim-hook count=500</ph02>
-      <ph03>perf sim-hook count=800</ph03>
-      <ph04>perf sim-hook count=1000</ph04>
-      <ph05>perf sim-hook count=2000</ph05>
-      <ph06>perf sim-hook count=5000</ph06>
-      <ph07>perf sim-hook count=8000</ph07>
-      <ph08>perf sim-hook count=10000</ph08>
-      <ph09>perf sim-hook count=20000</ph09>
-      <ph10>perf sim-hook count=50000</ph10>
-      <ph11>perf sim-hook count=80000</ph11>
-      <ph12>perf sim-hook count=100000</ph12>
-      <ph13>perf sim-hook count=200000</ph13>
-      <ph14>perf sim-hook count=400000</ph14>
-      <ph15>perf sim-hook count=800000</ph15>
-
-      <pp00>perf sim-pipeline count=100</pp00>
-      <pp01>perf sim-pipeline count=200</pp01>
-      <pp02>perf sim-pipeline count=500</pp02>
-      <pp03>perf sim-pipeline count=800</pp03>
-      <pp04>perf sim-pipeline count=1000</pp04>
-      <pp05>perf sim-pipeline count=2000</pp05>
-      <pp06>perf sim-pipeline count=5000</pp06>
-      <pp07>perf sim-pipeline count=8000</pp07>
-      <pp08>perf sim-pipeline count=10000</pp08>
-      <pp09>perf sim-pipeline count=20000</pp09>
-      <pp10>perf sim-pipeline count=50000</pp10>
-      <pp11>perf sim-pipeline count=80000</pp11>
-      <pp12>perf sim-pipeline count=100000</pp12>
-      <pp13>perf sim-pipeline count=200000</pp13>
-      <pp14>perf sim-pipeline count=500000</pp14>
-      <pp15>perf sim-pipeline count=800000</pp15>
-
-      <pc00>perf cmd-hook count=100</pc00>
-      <pc01>perf cmd-hook count=200</pc01>
-      <pc02>perf cmd-hook count=500</pc02>
-      <pc03>perf cmd-hook count=800</pc03>
-      <pc04>perf cmd-hook count=1000</pc04>
-      <pc05>perf cmd-hook count=2000</pc05>
-      <pc06>perf cmd-hook count=5000</pc06>
-      <pc07>perf cmd-hook count=8000</pc07>
-      <pc08>perf cmd-hook count=10000</pc08>
-      <pc09>perf cmd-hook count=20000</pc09>
-      <pc10>perf cmd-hook count=50000</pc10>
-      <pc11>perf cmd-hook count=80000</pc11>
-      <pc12>perf cmd-hook count=100000</pc12>
-      <pc13>perf cmd-hook count=200000</pc13>
-      <pc14>perf cmd-hook count=500000</pc14>
-      <pc15>perf cmd-hook count=800000</pc15>
-
-      <pe00>perf emulated-roundtrip count=100</pe00>
-      <pe01>perf emulated-roundtrip count=200</pe01>
-      <pe02>perf emulated-roundtrip count=500</pe02>
-      <pe03>perf emulated-roundtrip count=800</pe03>
-      <pe04>perf emulated-roundtrip count=1000</pe04>
-      <pe05>perf emulated-roundtrip count=2000</pe05>
-      <pe06>perf emulated-roundtrip count=5000</pe06>
-      <pe07>perf emulated-roundtrip count=8000</pe07>
-      <pe08>perf emulated-roundtrip count=10000</pe08>
-      <pe09>perf emulated-roundtrip count=20000</pe09>
-      <pe10>perf emulated-roundtrip count=50000</pe10>
-      <pe11>perf emulated-roundtrip count=80000</pe11>
-      <pe12>perf emulated-roundtrip count=100000</pe12>
-      <pe13>perf emulated-roundtrip count=200000</pe13>
-      <pe14>perf emulated-roundtrip count=500000</pe14>
-      <pe15>perf emulated-roundtrip count=800000</pe15>
-    </Perf>
   </AutoCommands>
 </Config>

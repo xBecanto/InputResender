@@ -55,7 +55,7 @@ public class NetConnectionGroup {
 		foreach ( var b in B ) b.Device.AcceptAsync ( AcceptConn, CTS.Token );
 	}
 
-	private void AcceptConn ( NetworkConnection conn ) {
+	private void AcceptConn ( NetworkConnection conn, INetPoint oldTarget ) {
 		if ( conn == null ) throw new ArgumentNullException ( nameof ( conn ) );
 		if ( Conns.ContainsKey ( (conn.LocalDevice.EP, conn.TargetEP) ) ) throw new InvalidOperationException ( "Connection already exists" );
 		Conns[(conn.LocalDevice.EP, conn.TargetEP)] = conn;

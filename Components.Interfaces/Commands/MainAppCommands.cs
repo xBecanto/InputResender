@@ -61,13 +61,17 @@ public class TargetManagerCommand : DCommand<DMainAppCore> {
 				TargetEP = null;
 				return new ( "Target disconnected." );
 			}
+
+			context.Args.RegisterSwitch ( 'r', "renew" ); // Either renew old, already existing connection or create a new one
+			context.Args.RegisterSwitch ( 'p', "prefix", "24" );
 			if ( IPEndPoint.TryParse ( context[1], out var IPEP ) ) {
 				if ( TargetEP != null ) {
 					try { core.PacketSender.Disconnect ( TargetEP ); } catch { }
 				}
-				TargetEP = new IPNetPoint ( IPEP );
+				int PrefixLength = context.Args.Int ( "--prefix", "Prefix length", true ).Value;
+				TargetEP = new IPNetPoint ( IPEP, prefixLength: PrefixLength );
 				try {
-					core.PacketSender.Connect ( TargetEP );
+					core.PacketSender.Connect ( TargetEP, context.Args.Present ( "--renew" ) );
 					return new ( $"Target set to IP end point {TargetEP}" );
 				} catch {
 					TargetEP = null;

@@ -1,0 +1,22 @@
+@using BasicModule
+@using ScriptedInputProcessor
+
+@in SIP_Status_t sip_status
+@out Int ConsumeEvent
+Int isConsuming = 0
+Int isConsumingNext = 1
+Int tmp = 0
+
+--> Init
+String pressedKeyName = GET_SIP_KEY_NAME sip_status 0
+Int pressedKeyStatus = GET_SIP_KEY_STATUS sip_status pressedKeyName
+COMPARE_INT pressedKeyStatus 65534
+?> pressedKeyStatus = 1
+# If Tab is pressed, switch between consuming and not consuming
+COMPARE_KEYS_3 sip_status "Tab" "None" "None"
+?A tmp = isConsuming
+?A isConsuming = isConsumingNext
+?A isConsumingNext = tmp
+ConsumeEvent = isConsuming
+?A COMPARE_INT isConsuming 0
+?A> FIRE_KEY sip_status pressedKeyName pressedKeyStatus

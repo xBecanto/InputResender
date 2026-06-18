@@ -44,6 +44,8 @@ public class MPacketSender : DPacketSender, INetPoint, INetDevice {
 
 	string INetPoint.NetworkAddress => "MPSender";
 
+	public bool DoNetworksMatch ( INetPoint other ) => other is MPacketSender; // All MPacketSenders are as of now considered to be in the same network.
+
 	string INetPoint.FullNetworkPath => ((INetPoint)this).Address;
 
 	int INetPoint.PrefixLength => 0;
@@ -53,12 +55,12 @@ public class MPacketSender : DPacketSender, INetPoint, INetDevice {
 	INetPoint INetDevice.EP => this;
 
 	public override event OnReceiveHandler OnReceive;
-	public override event Action<NetworkConnection> OnNewConn;
+	public override event Action<NetworkConnection, INetPoint> OnNewConn;
 	public override event Action<string, Exception> OnError;
 
 	public event Action<INetDevice, INetPoint> OnClosed;
 
-	public override void Connect ( INetPoint ep ) => ((INetDevice)this).Connect ( ep, null );
+	public override void Connect ( INetPoint ep, bool canReconnect = false ) => ((INetDevice)this).Connect ( ep, null );
 	public override void Destroy () => ((INetDevice)this).Close ();
 	public override void Disconnect ( INetPoint ep ) => ((INetDevice)this).UnregisterConnection ( Conns[(MPacketSender)ep].Connection );
 	public override string GetEPInfo ( INetPoint ep ) => ((INetDevice)this).GetInfo ();
@@ -85,12 +87,13 @@ public class MPacketSender : DPacketSender, INetPoint, INetDevice {
 			SendPriv ( new NetMessagePacket ( data, conn.Key, this ) );
 	}
 
-	void INetDevice.AcceptAsync ( Action<NetworkConnection> callback, CancellationToken ct ) {
+	void INetDevice.AcceptAsync ( Action<NetworkConnection, INetPoint, bool> callback, CancellationToken ct ) {
 		if ( portID < 1 ) throw new InvalidOperationException ( "Not bound" );
 		ArgumentNullException.ThrowIfNull ( callback, nameof ( callback ) );
 
-		OnNewConn += callback;
-		ct.Register ( () => OnNewConn -= callback );
+		Action<NetworkConnection, INetPoint> onNewConn = ( conn, netPoint ) => callback ( conn, netPoint, false );
+		OnNewConn += onNewConn;
+		ct.Register ( () => OnNewConn -= onNewConn );
 	}
 
 	void INetDevice.Bind ( INetPoint ep ) {
@@ -114,7 +117,7 @@ public class MPacketSender : DPacketSender, INetPoint, INetDevice {
 		}
 	}
 
-	NetworkConnection INetDevice.Connect ( INetPoint ep, INetDevice.MessageHandler recvAct, int timeout ) {
+	NetworkConnection INetDevice.Connect ( INetPoint ep, INetDevice.MessageHandler recvAct, int timeout, bool canReconnect ) {
 		ArgumentNullException.ThrowIfNull ( ep );
 		if ( ep is not MPacketSender mp ) throw new InvalidCastException ( $"Unexpected object type: {ep.GetType ().Name}." );
 		if ( mp == this ) throw new Exception ( "Connecting to self is not allowed!" );
@@ -125,7 +128,7 @@ public class MPacketSender : DPacketSender, INetPoint, INetDevice {
 
 		mp.Connect ( this );
 
-		OnNewConn?.Invoke ( connInfo.Connection );
+		OnNewConn?.Invoke ( connInfo.Connection, null );
 		return connInfo.Connection;
 	}
 

@@ -27,6 +27,8 @@ namespace InputResender.Services.NetClientService.InMemNet {
 			lock ( Logbook ) Logbook.Add ( msg );
 		}
 
+		public bool DoNetworksMatch ( INetPoint other ) => other is InMemNetPoint point && ID == point.ID;
+
 		private InMemNetPoint ( int id, int port, bool reserve = true ) {
 			ID = id;
 			_port = port;

@@ -21,7 +21,7 @@ namespace Components.Implementations {
 		private readonly List<OnReceiveHandler> OnReceiveHandlers = new ();
 		private List<INetPoint[]> NetList;
 
-		public override event Action<NetworkConnection> OnNewConn;
+		public override event Action<NetworkConnection, INetPoint> OnNewConn;
 
 		private event Action<string, Exception> OnErrorLocal;
 		public override event Action<string, Exception> OnError { add => OnErrorLocal += value; remove => OnErrorLocal -= value; }
@@ -76,9 +76,9 @@ namespace Components.Implementations {
 			Clients.AcceptAcync ( OnNewConnection );
 		}
 
-		private void OnNewConnection (NetworkConnection conn) {
+		private void OnNewConnection (NetworkConnection conn, INetPoint oldTarget) {
 			conn.OnReceive += LocalReceiver;
-			OnNewConn?.Invoke ( conn );
+			OnNewConn?.Invoke ( conn, oldTarget );
 		}
 		private void PrintError (string msg, Exception e) {
 			errors.Add ( (msg, e) );
@@ -94,12 +94,12 @@ namespace Components.Implementations {
 
 		public override INetPoint OwnEP ( int TTL, int network = 0 ) => NetList[network][TTL];
 
-		public override void Connect ( INetPoint epObj ) {
+		public override void Connect ( INetPoint epObj, bool canReconnect = false ) {
 			if ( epObj == null ) throw new ArgumentNullException ( nameof ( epObj ) );
 			NetworkConnection conn = null;
 			for (int i = 0; i < 5; i++ ) {
 				try {
-					conn = Clients.Connect ( epObj );
+					conn = Clients.Connect ( epObj, canReconnect: canReconnect );
 					break;
 				} catch (OperationCanceledException e) {
 					if ( i == 4 ) throw new InvalidOperationException ( $"Failed to connect to {epObj}", e );

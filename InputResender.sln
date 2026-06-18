@@ -35,7 +35,6 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "InputResender.PerformanceTe
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{8EC462FD-D22E-90A8-E5CE-7E832BA40C5D}"
 	ProjectSection(SolutionItems) = preProject
-		Misc\Diary.md = Misc\Diary.md
 		README.md = README.md
 		Docs\Development.md = Docs\Development.md
 		Docs\ProjectOverview.md = Docs\ProjectOverview.md
@@ -43,6 +42,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 		Docs\UseCases.md = Docs\UseCases.md
 		Docs\Future.md = Docs\Future.md
 		config.xml = config.xml
+		MorseCode.scl = MorseCode.scl
+		Passthrough.scl = Passthrough.scl
 	EndProjectSection
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "InputResender.WebUI", "InputResender.WebUI\InputResender.WebUI.csproj", "{8282A626-8600-46B2-B77C-87D8C4C34DFE}"

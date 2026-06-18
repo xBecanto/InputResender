@@ -3,6 +3,7 @@
 
 @in SIP_Status_t sip_status
 @in Int SettingChanged
+@out Int ConsumeEvent
 
 # A · −				H · · · ·		O − − −			V · · · −
 # B − · · ·			I · ·			P · − − ·		W · − −
@@ -50,11 +51,11 @@ emit n
 SIP_3Tree --> E -e-> I -t-> A # ·
 SIP_3Tree --> I -e-> S -t-> U # ··
 SIP_3Tree --> S -e-> H -t-> V # ···
-SIP_3Tree --> H -e-> 5 -t-> 4 # ····
-SIP_3Tree --> 4					# ·····
-SIP_3Tree --> 5					# ····-
-SIP_3Tree --> V        -t-> 3 # ···-
-SIP_3Tree --> 3					# ···--
+SIP_3Tree --> H -e-> D5 -t-> D4 # ····
+SIP_3Tree --> D4				# ·····
+SIP_3Tree --> D5				# ····-
+SIP_3Tree --> V        -t-> D3 # ···-
+SIP_3Tree --> D3				# ···--
 SIP_3Tree --> U -e-> F        # ··-
 SIP_3Tree --> F					# ··-·
 SIP_3Tree --> A -e-> R -t-> W # ·-
@@ -62,24 +63,24 @@ SIP_3Tree --> R -e-> L        # ·-·
 SIP_3Tree --> L					# ·-··
 SIP_3Tree --> W -e-> P -t-> J # ·--
 SIP_3Tree --> P					# ·--·
-SIP_3Tree --> J        -T-> 1 # ·---
-SIP_3Tree --> 1					# ·----
+SIP_3Tree --> J        -T-> D1 # ·---
+SIP_3Tree --> D1				# ·----
 SIP_3Tree --> T -e-> N -t-> M # −
 SIP_3Tree --> N -e-> D -t-> K # −·
 SIP_3Tree --> D -e-> B -T-> X # -··
-SIP_3Tree --> B -e-> 6        # -···
-SIP_3Tree --> 6					# -····
+SIP_3Tree --> B -e-> D6       # -···
+SIP_3Tree --> D6				# -····
 SIP_3Tree --> K -e-> C -t-> Y # −·−
 SIP_3Tree --> C					# −·−·
 SIP_3Tree --> Y					# −·−-
 SIP_3Tree --> M -e-> G -t-> O # −-
 SIP_3Tree --> G -e-> Z -t-> Q # −-·
 SIP_3Tree --> Q					# −-·-
-SIP_3Tree --> Z -e-> 7        # −-··
-SIP_3Tree --> 7					# −-···
+SIP_3Tree --> Z -e-> D7        # −-··
+SIP_3Tree --> D7				# −-···
 SIP_3Tree --> O -e-> Separator -t-> Decimal # −−-
-SIP_3Tree --> Separator -E-> 8        # −−-·
-SIP_3Tree --> 8					# −−-··
-SIP_3Tree --> Decimal   -E-> 9 -T-> 0 # −−--
-SIP_3Tree --> 9					# −−--·
-SIP_3Tree --> 0					# −−---
+SIP_3Tree --> Separator -E-> D8        # −−-·
+SIP_3Tree --> D8				# −−-··
+SIP_3Tree --> Decimal   -E-> D9 -T-> D0 # −−--
+SIP_3Tree --> D9				# −−--·
+SIP_3Tree --> D0				# −−---

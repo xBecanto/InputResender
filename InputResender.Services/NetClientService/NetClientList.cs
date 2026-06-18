@@ -28,7 +28,7 @@ public class NetClientList {
 	//private HashSet<INetPoint> AvailablePoints;
 	//public IReadOnlySet<INetPoint> AvailableEPs => Devices.Keys.ToHashSet ();
 	private CancellationTokenSource AccepterCT;
-	private Action<NetworkConnection> ConnAcceptCallback;
+	private Action<NetworkConnection, INetPoint> ConnAcceptCallback;
 
 	public NetClientList () {
 		Devices = new ();
@@ -58,7 +58,7 @@ public class NetClientList {
 	}
 
 	// Even though we probably want to accept rigth from start, this will allow to change the connection accepting callback during runtime
-	public CancellationTokenSource AcceptAcync ( Action<NetworkConnection> callback ) {
+	public CancellationTokenSource AcceptAcync ( Action<NetworkConnection, INetPoint> callback ) {
 		// Start accepting new connections. When callback is null, the caller doesn't want to be notified about new connections (probably is guided by other events and checking the Connections dictionary is enough)
 		// To stop accepting, call Cancel on the returned CancellationTokenSource
 
@@ -83,23 +83,24 @@ public class NetClientList {
 		var netAddr = target.NetworkAddress;
 		List<INetPoint> validEPs = [];
 		foreach ( var EP in Devices.Keys ) {
-			if ( !Devices.ContainsKey ( EP ) ) continue;
-			if ( EP.NetworkAddress.Equals ( netAddr ) )
-				validEPs.Add ( EP );
+			if ( target.InSameNetwork ( EP ) ) validEPs.Add ( EP );
 		}
 
 		return validEPs;
 	}
 
-	private void ConnAccepter ( NetworkConnection conn ) {
-		if ( conn == null ) throw new ArgumentNullException ( nameof ( conn ) );
-		if ( Conns.ContainsKey ( conn.TargetEP ) ) throw new InvalidOperationException ( $"Connection to {conn.TargetEP} already exists" );
+	private void ConnAccepter ( NetworkConnection conn, INetPoint oldTarget, bool reconnectRequest = false ) {
+		ArgumentNullException.ThrowIfNull ( conn );
+        if ( Conns.ContainsKey ( conn.TargetEP ) ) {
+			if ( reconnectRequest ) return; // Connection already exists on our side, no data are changed (currently)
+			else throw new InvalidOperationException ( $"Connection to {conn.TargetEP} already exists" );
+		}
 		Conns.Add ( conn.TargetEP, conn );
-		ConnAcceptCallback?.Invoke ( conn );
+		ConnAcceptCallback?.Invoke ( conn, oldTarget );
 		conn.OnClosed += ( _, ep ) => Conns.Remove ( ep );
 	}
 
-	public NetworkConnection Connect ( INetPoint targEP, int timeout = 1000 ) {
+	public NetworkConnection Connect ( INetPoint targEP, int timeout = 1000, bool canReconnect = false ) {
 		if ( targEP == null ) throw new ArgumentNullException ( nameof ( targEP ) );
 		if ( Conns.ContainsKey ( targEP ) ) throw new InvalidOperationException ( $"Connection to {targEP} already exists" );
 
@@ -109,8 +110,8 @@ public class NetClientList {
 		foreach ( var VARIABLE in locEPs) {
 			 // Try to connect from each of the valid local EPs until one succeeds. This is needed, because even if there are multiple valid local EPs, some of them might be already used for other connections, or just not working for some reason
 			 try {
-				 var conn = Devices[VARIABLE].Connect ( targEP, null, timeout );
-				 ConnAccepter ( conn );
+				 var conn = Devices[VARIABLE].Connect ( targEP, null, timeout, canReconnect );
+				 ConnAccepter ( conn, null );
 				 return conn;
 			 } catch ( Exception ) {
 				 continue;

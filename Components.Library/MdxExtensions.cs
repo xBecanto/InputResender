@@ -223,7 +223,7 @@ public static class MdxExtensions {
 		};
 		byte[] bAr = IP.GetAddressBytes ();
 		for ( int i = 0; i < bAr.Length; i++ ) {
-			bAr[i] &= prefix switch {
+			bAr[i] &= Math.Max ( prefix, 0 ) switch {
 				0 => 0,
 				1 => 0x80,
 				2 => 0xC0,

@@ -22,6 +22,8 @@ namespace InputResender.Services {
 			Connect = 0xA1,
 			/// <summary>Request or notify connection close</summary>
 			Disconnect = 0xA2,
+			/// <summary>Incoming connection request that allows restoring old connections</summary>
+			Reconnect = 0xA3,
 			/// <summary>Generic confirmation</summary>
 			Confirm = 0x33
 		}
@@ -29,10 +31,10 @@ namespace InputResender.Services {
 		public enum ProcessResult { Accepted, Skiped, Closed, Confirmed }
 		void Bind ( INetPoint ep );
 		void Close ();
-		NetworkConnection Connect ( INetPoint ep, MessageHandler recvAct, int timeout = 1000 );
+		NetworkConnection Connect ( INetPoint ep, MessageHandler recvAct, int timeout = 1000, bool canReconnect = false );
 		IReadOnlyDictionary<INetPoint, NetworkConnection> ActiveConnections { get; }
 		bool IsConnected ( INetPoint ep );
-		void AcceptAsync ( Action<NetworkConnection> callback, System.Threading.CancellationToken ct );
+		void AcceptAsync ( Action<NetworkConnection, INetPoint, bool> callback, System.Threading.CancellationToken ct );
 		INetPoint EP { get; }
 		void UnregisterConnection ( NetworkConnection connection );
 		/// <summary>Checks, if this device is using same resources as <paramref name="device"/></summary>

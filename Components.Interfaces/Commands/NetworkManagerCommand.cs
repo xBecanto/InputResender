@@ -185,10 +185,17 @@ public class NetworkCallbacks : DCommand<DMainAppCore> {
 		}
 	}
 
-	private void NewConnCallback ( object connInfo ) {
+	private void NewConnCallback ( NetworkConnection connInfo, INetPoint oldTarget ) {
 		switch ( NewConnCB ) {
 		case CallbackType.None: return;
-		case CallbackType.Print: lastContext.CmdProc.ProcessLine ( $"print \"New connection: {connInfo}\"" ); return;
+		case CallbackType.Print:
+			if ( oldTarget == null )
+				lastContext.CmdProc.ProcessLine ( $"print \"New connection: {connInfo}\"" );
+			else if ( oldTarget.Equals ( connInfo.TargetEP ) )
+				lastContext.CmdProc.ProcessLine ( $"print \"Connection updated: {connInfo}\"" );
+			else
+				lastContext.CmdProc.ProcessLine ( $"print \"Connection changed from {oldTarget} to {connInfo}\"" );
+			return;
 		case CallbackType.Fcn:
 			try {
 				var CB = lastContext.CmdProc.GetVar<Action<object>> ( NEWCONNCBVarName );

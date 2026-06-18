@@ -1,5 +1,6 @@
 ﻿using Components.Interfaces;
 using Components.Library;
+using Components.Library.ComponentSystem;
 
 using CallbackHolder = Components.Interfaces.HCallbackHolder<Components.Interfaces.DHookManager.HookCallback>;
 using DeviceID = System.Int32;
@@ -110,6 +111,145 @@ public class VHookManager : DHookManager {
 	private void DelayedCB ( DictionaryKey key, HInputEventDataHolder e ) {
 		if ( !Callbacks.TryGetValue ( (e.HookInfo.DeviceID, CBType.Delayed), out var cbs ) ) return;
 		foreach ( var cb in cbs ) if ( !cb.callback ( e ) ) return;
+	}
+
+	public override ComponentUIParametersInfo GetUIDescription () {
+		var hooksSeparator = new UI_Separator.Factory ()
+			.AsHeader ()
+			.WithName ( "HooksSeparator" )
+			.WithLabel ( "Hooks Management" )
+			.WithDescription ( "Manage active input hooks" )
+			.Build ();
+
+		var deviceSelector = new UI_DropDown.Factory ()
+			.WithOptionUpdator ( () => {
+				if ( ActiveHooks.Count == 0 ) return new List<string> { "No devices" };
+				return ActiveHooks.Keys.Select ( d => $"Device {d}" ).ToList ();
+			} )
+			.WithName ( "DeviceSelector" )
+			.WithLabel ( "Select Device" )
+			.WithDescription ( "Select a device to view and manage its hooks" )
+			.Build<UI_DropDown> ();
+
+		var hooksList = new UI_ListView.Factory ()
+			.UpdatedByDropDown ( deviceSelector, ( selID ) => {
+				if ( ActiveHooks.Count == 0 || selID < 0 ) return new List<string> { "No hooks registered" };
+				var deviceID = ActiveHooks.Keys.ElementAt ( selID );
+				if ( !ActiveHooks.TryGetValue ( deviceID, out var hookGroup ) )
+					return new List<string> { "Device not found" };
+
+				var hooks = new List<string> ();
+				foreach ( var vkChange in SupportedVKs ) {
+					var hookID = hookGroup[vkChange];
+					if ( hookID != DictionaryKey.Empty ) {
+						hooks.Add ( $"{vkChange}: {hookID}" );
+					}
+				}
+				return hooks.Count > 0 ? hooks : new List<string> { "No active hooks for this device" };
+			} )
+			.WithName ( "HooksList" )
+			.WithLabel ( "Active Hooks" )
+			.WithDescription ( "List of active hooks for the selected device" )
+			.Build ();
+
+		var totalHooksField = new UI_IntField.Factory ()
+			.WithName ( "TotalHooks" )
+			.WithLabel ( "Total Hooks" )
+			.WithDescription ( "Total number of unique hooks registered across all devices" )
+			.WithPureUpdater ( () => OwnedHooks.Count )
+			.Build ();
+
+		var totalDevicesField = new UI_IntField.Factory ()
+			.WithName ( "TotalDevices" )
+			.WithLabel ( "Active Devices" )
+			.WithDescription ( "Total number of devices with active hooks" )
+			.WithPureUpdater ( () => ActiveHooks.Count )
+			.Build ();
+
+		var removeHookButton = new UI_ActionButton.Factory ()
+			.WithOnClick ( () => {
+				if ( deviceSelector.Value.selID < 0 || ActiveHooks.Count == 0 ) return;
+				var deviceID = ActiveHooks.Keys.ElementAt ( deviceSelector.Value.selID );
+				RemoveHook ( deviceID, SupportedVKs );
+			} )
+			.WithName ( "RemoveHookButton" )
+			.WithLabel ( "Remove All Hooks" )
+			.WithDescription ( "Remove all hooks for the selected device" )
+			.Build ();
+
+		var clearAllButton = new UI_ActionButton.Factory ()
+			.WithOnClick ( () => {
+				foreach ( var deviceID in ActiveHooks.Keys.ToList () ) {
+					ClearHooks ( deviceID );
+				}
+			} )
+			.WithName ( "ClearAllButton" )
+			.WithLabel ( "Clear All Hooks" )
+			.WithDescription ( "Remove hooks for all devices" )
+			.Build ();
+
+		var callbacksSeparator = new UI_Separator.Factory ()
+			.AsHeader ()
+			.WithName ( "CallbacksSeparator" )
+			.WithLabel ( "Callbacks" )
+			.WithDescription ( "View registered callbacks" )
+			.Build ();
+
+		var callbacksList = new UI_ListView.Factory ()
+			.WithName ( "CallbacksList" )
+			.WithLabel ( "Registered Callbacks" )
+			.WithDescription ( "List of callback registrations by device and type" )
+			.WithPureUpdater ( () => {
+				if ( Callbacks.Count == 0 ) return ["No callbacks registered"];
+				return Callbacks
+					.Select ( kvp => $"Device {kvp.Key.Item1}, {kvp.Key.Item2}: {kvp.Value.Count} callback(s)" )
+					.ToList ();
+			} )
+			.Build ();
+
+		var totalCallbacksField = new UI_IntField.Factory ()
+			.WithName ( "TotalCallbacks" )
+			.WithLabel ( "Total Callbacks" )
+			.WithDescription ( "Total number of callback registrations" )
+			.WithPureUpdater ( () => Callbacks.Values.Sum ( cbs => cbs.Count ) )
+			.Build ();
+
+		var verbositySeparator = new UI_Separator.Factory ()
+			.AsHeader ()
+			.WithName ( "VerbositySeparator" )
+			.WithLabel ( "Settings" )
+			.WithDescription ( "Hook manager settings" )
+			.Build ();
+
+		var verbosityDropDown = new UI_DropDown.Factory ()
+			.WithInitialValue ( (Verbosity, ["Verbose", "Silent"]) )
+			.WithName ( "VerbosityDropDown" )
+			.WithLabel ( "Verbosity" )
+			.WithDescription ( "Set verbosity level for the hook manager" )
+			.Build<UI_DropDown> ();
+
+		var applyVerbosityButton = new UI_ActionButton.Factory ()
+			.WithOnClick ( () => {
+				Verbosity = verbosityDropDown.Value.selID;
+			} )
+			.WithName ( "ApplyVerbosityButton" )
+			.WithLabel ( "Apply Verbosity" )
+			.WithDescription ( "Apply the selected verbosity setting" )
+			.Build ();
+
+		return new ComponentUIParametersInfo.Factory ()
+			.WithDefaultID ()
+			.WithComponentType ( GetType () )
+			.AddParameters (
+				hooksSeparator, deviceSelector, hooksList, totalHooksField, totalDevicesField,
+				removeHookButton, clearAllButton,
+				callbacksSeparator, callbacksList, totalCallbacksField,
+				verbositySeparator, verbosityDropDown, applyVerbosityButton
+			)
+			.WithName ( "Hook Manager" )
+			.WithLabel ( "VHookManager UI" )
+			.WithDescription ( "Manage input hooks, callbacks, and monitor hook activity" )
+			.Build () as ComponentUIParametersInfo;
 	}
 
 	/// <summary>Since hooks don't map 1:1 to 'hook actions' (e.g. keydown), this class serves as abstraction of such mapping, i.e. presents as Dictionary&lt;VKChange, DictionaryKey&gt; ??Is this still valid after '2 HHookInfo should hold VKChange=>HookD mapping'??</summary>

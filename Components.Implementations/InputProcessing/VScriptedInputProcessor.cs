@@ -72,7 +72,7 @@ public class VScriptedInputProcessor : DInputProcessor {
 			ScriptRuntime.SetExternVar<BasicValueIntDef> ( "SettingChanged", intDefinition => new BasicValueInt ( intDefinition, 0 ), Owner );
 			WasFired = false;
 			lock (ScriptRuntime) {
-				ScriptRuntime.Execute ( _execSafeMode );
+				 ScriptRuntime.Execute ( _execSafeMode );
 				//ScriptRunner.ExecuteSafe ( ScriptRuntime, [], ref progress );
 			}
 

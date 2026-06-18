@@ -6,7 +6,7 @@ using System.Threading;
 namespace InputResender.Services.NetClientService {
 	public abstract class ANetDevice<EPT> : INetDevice where EPT : class, INetPoint {
 		private Dictionary<EPT, NetworkConnection.NetworkInfo> Connections = new ();
-		private Action<NetworkConnection> ConnAccepter;
+		private Action<NetworkConnection, INetPoint, bool> ConnAccepter;
 
 		public string DeviceName { get; set; } = string.Empty;
 		public INetPoint EP { get => locEP; }
@@ -37,7 +37,7 @@ namespace InputResender.Services.NetClientService {
 			return false;
 		}
 
-		public void AcceptAsync ( Action<NetworkConnection> callback, CancellationToken ct ) {
+		public void AcceptAsync ( Action<NetworkConnection, INetPoint, bool> callback, CancellationToken ct ) {
 			if ( EP == null ) throw new InvalidOperationException ( "Not bound" );
 			if ( callback == null ) throw new ArgumentNullException ( nameof ( callback ) );
 			if ( ConnAccepter != null ) throw new InvalidOperationException ( "Already accepting" );
@@ -64,13 +64,13 @@ namespace InputResender.Services.NetClientService {
 			locEP = null;
 		}
 
-		public NetworkConnection Connect ( INetPoint ep, INetDevice.MessageHandler recvAct, int timeout = 1000 ) {
+		NetworkConnection INetDevice.Connect ( INetPoint ep, INetDevice.MessageHandler recvAct, int timeout, bool canReconnect ) {
 			// Argument check
 			if ( ep == null ) throw new ArgumentNullException ( nameof ( ep ) );
 			if ( locEP == null ) throw new InvalidOperationException ( "Not bound" );
 			if ( ep is not EPT targInMemEP ) throw new ArgumentException ( $"{nameof ( ep )} is not of type {nameof ( EPT )}" );
 
-			var connRequest = Connector<EPT>.Connect ( this, boundedLLDevice, targInMemEP, Send );
+			var connRequest = Connector<EPT>.Connect ( this, boundedLLDevice, targInMemEP, Send, canReconnect );
 			OpenConnRequests.Add ( targInMemEP, connRequest );
 			try {
 				var connInfo = connRequest.Wait ( new CancellationTokenSource ( timeout ).Token );
@@ -112,16 +112,23 @@ namespace InputResender.Services.NetClientService {
 			var remoteEP = msg.SourceEP as EPT;
 
 			NetworkConnection.NetworkInfo connInfo;
-			if ( msg.SignalType == INetDevice.SignalMsgType.Connect ) {
+			bool canReconnect = msg.SignalType == INetDevice.SignalMsgType.Reconnect;
+			if ( msg.SignalType == INetDevice.SignalMsgType.Connect || canReconnect ) {
 				// Incoming request for new connection, the devices aren't sure at this point about existance or state of the other
 				if ( ConnAccepter == null ) return LogRecvError ( msg, "Not accepting connections" );
-				if ( Connections.ContainsKey ( remoteEP ) ) return LogRecvError ( msg, "Connection already exists" );
 				if ( OpenConnRequests.ContainsKey ( remoteEP ) ) return LogRecvError ( msg, "Already waiting for this connection request" );
 
-				// Accept connection on this side
-				var conn = NetworkConnection.Create ( this, remoteEP, Send );
-				ConnAccepter.Invoke ( conn.Connection );
-				Connections.Add ( remoteEP, conn );
+				if ( Connections.TryGetValue ( remoteEP, out var conn ) ) {
+					if ( canReconnect && conn.Connection.TargetEP.Equals ( remoteEP ) && conn.Connection.LocalDevice == this )
+						ConnAccepter.Invoke ( conn.Connection, conn.Connection.TargetEP, canReconnect );
+					if ( !canReconnect ) return LogRecvError ( msg, "Connection already exists" );
+				} else {
+					conn = NetworkConnection.Create ( this, remoteEP, Send );
+					Connections.Add ( remoteEP, conn );
+
+					// Accept connection on this side
+					ConnAccepter.Invoke ( conn.Connection, null, canReconnect );
+				}
 
 				// Send confirmation to requester
 				var accMsg = NetMessagePacket.CreateSignal ( INetDevice.SignalMsgType.Confirm, EP, msg.SourceEP );
