@@ -1,4 +1,4 @@
-f/gPta4PTS32zf9gE9D6rMqYIc7AhnisSQgGz54q3fo=
+0vf3B/lH7JI+r2TknLIpPPIvFPepBjLwmEvsc0VokwE=
 <Config>
   <AutostartName>initCmds</AutostartName>
   <PrintAutoCommands>T</PrintAutoCommands>
@@ -15,12 +15,12 @@ f/gPta4PTS32zf9gE9D6rMqYIc7AhnisSQgGz54q3fo=
       <C6>core activate</C6>
       <C8>loglevel all</C8>
     </initCmds>
-<printWinKey>
-    <W0>windows load --force</W0>
-    <W1>windows msgs start</W1>
-    <W2>hook manager start</W2>
-    <W3>hook add delayed Print Keydown KeyUp</W3>
-</printWinKey>
+    <printWinKey>
+      <W0>windows load --force</W0>
+      <W1>windows msgs start</W1>
+      <W2>hook manager start</W2>
+      <W3>hook add delayed Print Keydown KeyUp</W3>
+    </printWinKey>
     <HelloWorld>
       <H0>windows load --force</H0>
       <H1>hook manager start</H1>

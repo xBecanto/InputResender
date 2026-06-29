@@ -81,21 +81,61 @@ public class AutoCmdsCommand : DCommand<DMainAppCore> {
 			string name = context.Args.String ( context.ArgID + 1, "Name" );
 			if ( string.IsNullOrEmpty ( name ) )
 				return new CommandResult ( "Name cannot be empty." );
-			var cmds = Owner.Fetch<Config> ().FetchAutoCommands ( name );
+
+			Config config = Owner.Fetch<Config> ();
+			var cmds = config.FetchAutoCommands ( name );
 			if ( cmds == null || cmds.Count == 0 )
 				return new CommandResult ( $"No commands found for group '{name}'." );
 			var cliWrapper = context.CmdProc.GetVar<CliWrapper> ( CliWrapper.CLI_VAR_NAME );
 			int done = 0;
 			foreach ( var cmd in cmds ) {
 				if ( cmd.StartsWith ( '#' ) ) continue;
-				if ( Owner.Fetch<Config> ().PrintAutoCommands ) cliWrapper.ProcessLine ( cmd, true );
-				else cliWrapper.CmdProc.ProcessLine ( cmd );
+
+				Dictionary<string, (string, string)> ifAssign = [];
+				Dictionary<string, (string, string)> ifNotAssign = [];
+
+				string Command = cmd;
+				while ( true ) {
+					if ( Command.StartsWith ( "?", out Command ) ) {
+						Command = Command.ExtractPrefix ( ' ', out string condition, 1, 1 );
+						if ( condition.ContainsPrefix ( '=', out string prefix, out string suffix, 1, 1 ) ) {
+							if ( suffix != config.GetEnv ( prefix ) ) continue;
+						} else if ( config.GetEnv ( condition ) == null ) continue;
+
+					} else if ( Command.StartsWith ( "=", out Command ) ) {
+						Command = Command.ExtractPrefix ( ' ', out string assignVal, 5, 1 );
+						assignVal = assignVal.ExtractPrefix ( ':', out string content, 1, 3 );
+						assignVal = assignVal.ExtractPrefix ( '=', out string assignName, 1, 1 );
+						ifAssign[content] = (assignName, assignVal);
+
+					} else if ( Command.StartsWith ( "!", out Command ) ) {
+						Command = Command.ExtractPrefix ( ' ', out string assignVal, 5, 1 );
+						assignVal = assignVal.ExtractPrefix ( ':', out string content, 1, 3 );
+						assignVal = assignVal.ExtractPrefix ( '=', out string assignName, 1, 1 );
+						ifNotAssign[content] = (assignName, assignVal);
+					} else
+						break;
+				}
+
+				CommandResult cmdRes = null;
+				cmdRes = Owner.Fetch<Config> ().PrintAutoCommands
+					? cliWrapper.ProcessLine ( Command, true )
+					: cliWrapper.CmdProc.ProcessLine ( Command );
+
+				foreach ( var (content, (envName, envVal)) in ifAssign ) {
+					if ( cmdRes.Message.Contains ( content ) ) config.SetEnv ( envName, envVal );
+				}
+
+				foreach ( var (content, (envName, envVal)) in ifNotAssign ) {
+					if ( !cmdRes.Message.Contains ( content ) ) config.SetEnv ( envName, envVal );
+				}
+
 				done++;
 			}
-			return new CommandResult ( $"Executed {done} commands from group '{name}'." );
+			return new ( $"Executed {done} commands from group '{name}'." );
 		}
 		default:
-			return new CommandResult ( $"Unknown subcommand '{context.SubAction}'." );
+			return new ( $"Unknown subcommand '{context.SubAction}'." );
 		}
 	}
 }

@@ -299,6 +299,47 @@ public static class MdxExtensions {
 		return line[0..suffixPos];
 	}
 
+	public static string ExtractPrefix ( this string line, char separator, out string prefix, int minPrefix = -1, int minSuffix = -1 ) {
+		ArgumentNullException.ThrowIfNull ( line );
+		if (line.Length < minPrefix + minSuffix + 1) throw new InvalidOperationException ( "The line must be at least " + minPrefix + minSuffix + 1 );
+		int ID = line.IndexOf ( separator );
+		switch ( ID ) {
+		case < 0:
+			if ( minPrefix >= 0 )
+				throw new InvalidOperationException ( $"The line '{line}' must contain a prefix before '{separator}'" );
+			prefix = null;
+			return line;
+		case 0:
+			if ( minPrefix > 0 )
+				throw new InvalidOperationException ( $"The line '{line}' must contain a non-empty prefix before '{separator}'" );
+			prefix = "";
+			return line[1..];
+		default:
+			prefix = line[..ID];
+			string ret = line[(ID + 1)..];
+			if ( prefix.Length < minPrefix )
+				throw new InvalidOperationException ( $"The line '{line}' must contain a prefix before '{separator}' of at least {minPrefix} chars, but got {prefix.Length}" );
+
+			if ( ret.Length < minSuffix )
+				throw new InvalidOperationException ( $"The line '{line}' must contain a suffix after '{separator}' of at least {minSuffix} chars, but got {ret.Length}" );
+
+			return ret;
+		}
+	}
+
+	public static bool ContainsPrefix (
+		this string line, char separator
+		, out string prefix, out string suffix
+		, int minPrefix = -1, int minSuffix = -1
+	) {
+		prefix = suffix = null;
+		if ( !line.Contains ( separator ) ) return false;
+
+		// It is ok if the extraction throws as the separator is present but prefix/suffix is not in correct format
+		suffix = line.ExtractPrefix ( separator, out prefix, minPrefix, minSuffix );
+		return true;
+	}
+
 	public static int IndexOf<T> ( this IReadOnlyList<T> list, Func<T, bool> predicate ) {
 		if ( list == null || predicate == null ) return -1;
 		int N = list.Count;
@@ -306,6 +347,20 @@ public static class MdxExtensions {
 			if ( predicate ( list[i] ) ) return i;
 		}
 		return -1;
+	}
+
+	public static List<int> AllIndexesOf ( this string line, char ch ) {
+		if ( string.IsNullOrEmpty ( line ) ) return null;
+		List<int> ret = [];
+		for ( int i = 0; i < line.Length; i++ )
+			if ( line[i] == ch ) ret.Add ( i );
+		return ret;
+	}
+
+	public static void PushOrAppend<K, V> ( this Dictionary<K, List<V>> dict, K key, V val ) {
+        ArgumentNullException.ThrowIfNull(dict);
+        if ( dict.TryGetValue ( key, out List<V> lst ) ) lst.Add ( val );
+		else dict[key] = [val];
 	}
 
 	public static ICollection<(T, U)> Unwrap<T, U> ( this IDictionary<T, List<U>> dict ) {
@@ -448,4 +503,78 @@ public static class MdxExtensions {
 				? default
 				: throw new ArgumentOutOfRangeException ( $"Index {id} is out of range for array of length {ar.Length}." ) )
 			: ar[id];
+
+
+
+
+	public static string[] TokenizeBySeparators ( this string input, string[] separators ) {
+		if ( separators == null || separators.Length == 0 ) { return new string[] { input }; }
+
+		Dictionary<char, List<(string left, string right)>> starters = [];
+		foreach ( var sep in separators ) {
+			char starter = '\0';
+			string left = null, right = null;
+			ArgumentNullException.ThrowIfNullOrEmpty ( sep, nameof(separators) );
+			var allRanges = sep.AllIndexesOf ( '*' ).Where ( i => i == 0 || sep[i - 1] != '\\' );
+			if ( allRanges.Count () > 1 )
+				throw new NotSupportedException ( $"Multiple '*' in separator '{sep}' is not supported." );
+
+			if ( allRanges.Count () == 0 ) {
+				starter = sep[0];
+				left = right = sep;
+			} else {
+				int asteriskPos = allRanges.First ();
+				if ( asteriskPos == 0 ) {
+					if ( sep.Length == 1 ) throw new NotSupportedException ( $"Separator '{sep}' cannot be just '*'." );
+
+					starter = sep[1];
+					right = sep[1..];
+				} else {
+					starter = sep[0];
+					left = sep[..asteriskPos];
+					right = asteriskPos + 1 < sep.Length ? sep[(asteriskPos + 1)..] : null;
+				}
+			}
+
+			starters.PushOrAppend ( starter, (left, right) );
+
+		}
+
+		List<string> ret = [];
+		int startBlock = 0;
+		for ( int i = 0; i < input.Length; i++ ) {
+			if (!starters.TryGetValue ( input[i], out var sepList )) continue;
+
+			foreach ( var (left, right) in sepList ) {
+				if ( left == null && right == null ) continue;
+				if ( left != null && input[i..(i + left.Length)] != left ) continue;
+				if ( left == null && input[i..(i + right.Length)] != right ) continue;
+
+				if ( left == right || right == null ) {
+					// No pattern, normal separator
+					if ( startBlock != i ) ret.Add ( input[startBlock..i] );
+					startBlock = i + (left == right ? left.Length : 0);
+					i += left.Length - 1;
+				} else if ( left == null ) {
+					if ( startBlock != i ) ret.Add ( input[startBlock..(i + right.Length)] );
+					startBlock = i + right.Length;
+					i += right.Length - 1;
+				} else {
+					int endID = input.IndexOf ( right, i + 1, StringComparison.Ordinal );
+					if ( endID == -1 ) continue;
+
+					endID += right.Length;
+					if ( startBlock != i ) ret.Add ( input[startBlock..i] );
+					ret.Add ( input[i..endID] );
+					startBlock = endID;
+					i = endID - 1;
+				}
+
+				break;
+			}
+		}
+		if (startBlock < input.Length) ret.Add ( input[startBlock..] );
+
+		return ret.ToArray ();
+	}
 }

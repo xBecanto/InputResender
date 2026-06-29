@@ -91,10 +91,13 @@ public class NetClientList {
 
 	private void ConnAccepter ( NetworkConnection conn, INetPoint oldTarget, bool reconnectRequest = false ) {
 		ArgumentNullException.ThrowIfNull ( conn );
-        if ( Conns.ContainsKey ( conn.TargetEP ) ) {
-			if ( reconnectRequest ) return; // Connection already exists on our side, no data are changed (currently)
-			else throw new InvalidOperationException ( $"Connection to {conn.TargetEP} already exists" );
+		if ( Conns.ContainsKey ( conn.TargetEP ) ) {
+			if ( reconnectRequest )
+				return; // Connection already exists on our side, no data are changed (currently)
+			else
+				throw new InvalidOperationException ( $"Connection to {conn.TargetEP} already exists" );
 		}
+
 		Conns.Add ( conn.TargetEP, conn );
 		ConnAcceptCallback?.Invoke ( conn, oldTarget );
 		conn.OnClosed += ( _, ep ) => Conns.Remove ( ep );

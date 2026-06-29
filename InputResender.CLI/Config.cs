@@ -21,6 +21,7 @@ public class Config : ComponentBase<DMainAppCore> {
 	private int maxOnelinerLength = 125;
 	private PrintFormat responsePrintFormat = PrintFormat.Normal;
 	private PasswordHolder configPassword = null;
+	private readonly Dictionary<string, string> EnvVars = [];
 
 	public Config ( string initPath, PasswordHolder password, DMainAppCore owner ) : base ( owner ) {
 		var searchOptions = FileAccessService.SearchOptions.ProjectFolder
@@ -100,6 +101,12 @@ public class Config : ComponentBase<DMainAppCore> {
 	public void SetNewPassword ( PasswordHolder newPassword ) {
 		configPassword = newPassword;
 		Save ();
+	}
+
+	public string GetEnv ( string name ) => EnvVars.GetValueOrDefault ( name );
+	public void SetEnv ( string name, string value ) {
+		if ( value == null ) EnvVars.Remove ( name );
+		else EnvVars[name] = value;
 	}
 
 	public IReadOnlyCollection<string> FetchAutoCommands ( string key ) {
@@ -182,6 +189,19 @@ public class Config : ComponentBase<DMainAppCore> {
 				case "AutoCommands":
 					autoCommands.Clear ();
 					LoadAutoCommands ( node, autoCommands );
+					break;
+				case "EnvVars":
+					EnvVars.Clear ();
+					foreach ( XmlNode envVar in node.ChildNodes ) {
+						string varName = null, varVal = null;
+						foreach ( XmlNode varData in envVar.ChildNodes ) {
+							if (varData.Name == "Name") varName = varData.InnerText;
+							if  (varData.Name == "Value") varVal = varData.InnerText;
+						}
+						if ( varName != null && varVal != null )
+							EnvVars.Add ( varName, varVal );
+					}
+
 					break;
 				}
 			}

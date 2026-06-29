@@ -158,4 +158,16 @@ public class MdxExtensionsTest {
 		Action act = () => MdxExtensions.ParseShortCode(invalidInput);
 		act.Should().Throw<ArgumentException>();
 	}
+
+	[Theory]
+	[InlineData("as df gh", new []{" "}, new []{"as", "df", "gh"})]
+	[InlineData("as,df gh", new []{" ", ","}, new []{"as", "df", "gh"})]
+	[InlineData("<a>v</a>", new []{"<*>"}, new []{"<a>", "v", "</a>"})]
+	[InlineData("a1.b2.c3", new []{".*"}, new []{"a1", ".b2", ".c3"})]
+	[InlineData("a1.b2.c3", new []{"*."}, new []{"a1.", "b2.", "c3"})]
+	public void TokenizeBySeparators_ShouldReturnExpectedTokens(string input, string[] separators, string[] expectedTokens) {
+		var tokens = input.TokenizeBySeparators(separators);
+
+		tokens.Should().BeEquivalentTo(expectedTokens);
+	}
 }
