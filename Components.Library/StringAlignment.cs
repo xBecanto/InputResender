@@ -140,12 +140,12 @@ public class StringAlignment {
 		if ( n == 0 || m == 0 ) {
 			if ( n == m ) return ([], 0); // No text in both
 
-			int N = int.Max ( n, m );
+			int N = Math.Max ( n, m );
 			string[] act = n == 0 ? second : first;
 			var ret = new AlignmentToken[N];
 			int score = 0;
 			for (int i = 0; i < N; i++) {
-				ret[i] = AlignmentToken.Insertion ( act, i );
+				ret[i] = n == 0 ? AlignmentToken.Insertion ( act, i ) : AlignmentToken.Deletion ( act, i );
 				score += GapPenalty * act[i].Length;
 			}
 
@@ -158,10 +158,15 @@ public class StringAlignment {
 		// Fill the scoring matrix
 		for ( int i = 1; i <= n; i++ ) {
 			for ( int j = 1; j <= m; j++ ) {
-				int matchScore = scoreMatrix[i - 1, j - 1].Val + GetScore ( first[i - 1], second[j - 1] )
-					* (1 + (first[i - 1].Length + second[j - 1].Length) / 2);
-				int deleteScore = scoreMatrix[i - 1, j].Val + GapPenalty * first[i - 1].Length;
-				int insertScore = scoreMatrix[i, j - 1].Val + GapPenalty * second[j - 1].Length;
+				int oldScore = scoreMatrix[i - 1, j - 1].Val;
+				int addScore = GetScore ( first[i - 1], second[j - 1] );
+				int lengthA = first[i - 1].Length;
+				int lengthB = second[j - 1].Length;
+				int mult = 1 + (lengthA + lengthB) / 2;
+
+				int matchScore = oldScore + addScore * mult;
+				int deleteScore = scoreMatrix[i - 1, j].Val + GapPenalty * lengthA;
+				int insertScore = scoreMatrix[i, j - 1].Val + GapPenalty * lengthB;
 
 				int max = Math.Max ( matchScore, Math.Max ( deleteScore, insertScore ) );
 				scoreMatrix[i, j] = (max, Backtrack.None);
