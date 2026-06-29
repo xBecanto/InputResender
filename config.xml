@@ -1,4 +1,4 @@
-olhrCOFJ9RpcdZZo0zFYoJ7quntFn+BASNCVVs0lAbM=
+f/gPta4PTS32zf9gE9D6rMqYIc7AhnisSQgGz54q3fo=
 <Config>
   <AutostartName>initCmds</AutostartName>
   <PrintAutoCommands>T</PrintAutoCommands>
@@ -129,6 +129,19 @@ olhrCOFJ9RpcdZZo0zFYoJ7quntFn+BASNCVVs0lAbM=
       <ta31>tapper mapping Single XX--X X</ta31>
       <ta32>tapper mapping Single XX-X- W</ta32>
       <ta33>tapper mapping Single XXX-- CapsLock None</ta33>
+      <ta34>tapper mapping Shift X---- T Shift</ta34>
+      <ta35>tapper mapping Shift -X--- A Shift</ta35>
+      <ta36>tapper mapping Shift --X-- E Shift</ta36>
+      <ta37>tapper mapping Shift ---X- I Shift</ta37>
+      <ta38>tapper mapping Shift ----X O Shift</ta38>
+      <ta39>tapper mapping Shift XX--- D Shift</ta39>
+      <ta40>tapper mapping Shift X-X-- U Shift</ta40>
+      <ta41>tapper mapping Shift X--X- P Shift</ta41>
+      <ta42>tapper mapping Shift X---X M Shift</ta42>
+      <ta43>tapper mapping Shift -XX-- N Shift</ta43>
+      <ta44>tapper mapping Shift -X-X- R Shift</ta44>
+      <ta45>tapper mapping Shift -X--X B Shift</ta45>
+      <ta46>tapper mapping Shift --XX- S Shift</ta46>
     </tapper>
     <tapperRun>
       <tr0>auto run Shared</tr0>

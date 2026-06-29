@@ -35,10 +35,28 @@ namespace Components.Implementations {
 			( cmd ) => cmd == InputData.Command.KeyPress ? 1 : 0,
 			( cmp, cmd ) => new SInputCommandParser_KeyDown ( cmp )
 			);
-		public override HInputEventDataHolder[] Parse ( InputData data ) =>
+		/*public override HInputEventDataHolder[] Parse ( InputData data ) =>
 			new[] {
 			new HKeyboardEventDataHolder ( data.Owner.Owner.Fetch<DInputReader> (), data.DeviceID, (int)data.Key, data.X, data.X )
-			};
+			};*/
+		public override HInputEventDataHolder[] Parse ( InputData data ) {
+			var inputReader = data.Owner.Owner.Fetch<DInputReader> ();
+			var events = new List<HInputEventDataHolder> ();
+
+			// Add modifier key down events
+			events.AddRange ( GenerateModifierEvents ( data.Modifiers, data.DeviceID, true, inputReader ) );
+
+			// Add main key down event
+			events.Add ( new HKeyboardEventDataHolder ( inputReader, data.DeviceID, (int)data.Key, data.X, data.X ) );
+
+			// Add modifier key up events (in reverse order)
+			var modUpEvents = GenerateModifierEvents ( data.Modifiers, data.DeviceID, false, inputReader );
+			for ( int i = modUpEvents.Length - 1; i >= 0; i-- ) {
+				events.Add ( modUpEvents[i] );
+			}
+
+			return events.ToArray ();
+		}
 	}
 	public class SInputCommandParser_KeyUp : SDInputCommandParser {
 		public SInputCommandParser_KeyUp ( DInputSimulator newOwner ) : base ( newOwner ) { }
@@ -46,10 +64,24 @@ namespace Components.Implementations {
 			( cmd ) => cmd == InputData.Command.KeyRelease ? 1 : 0,
 			( cmp, cmd ) => new SInputCommandParser_KeyUp ( cmp )
 			);
-		public override HInputEventDataHolder[] Parse ( InputData data ) =>
-			new[] {
-			new HKeyboardEventDataHolder ( data.Owner.Owner.Fetch<DInputReader> (), data.DeviceID, (int)data.Key, 0, 0 - data.X )
-			};
+		public override HInputEventDataHolder[] Parse ( InputData data ) {
+			var inputReader = data.Owner.Owner.Fetch<DInputReader> ();
+			var events = new List<HInputEventDataHolder> ();
+
+			// Add modifier key down events
+			events.AddRange ( GenerateModifierEvents ( data.Modifiers, data.DeviceID, true, inputReader ) );
+
+			// Add main key up event
+			events.Add ( new HKeyboardEventDataHolder ( inputReader, data.DeviceID, (int)data.Key, 0, 0 - data.X ) );
+
+			// Add modifier key up events (in reverse order)
+			var modUpEvents = GenerateModifierEvents ( data.Modifiers, data.DeviceID, false, inputReader );
+			for ( int i = modUpEvents.Length - 1; i >= 0; i-- ) {
+				events.Add ( modUpEvents[i] );
+			}
+
+			return events.ToArray ();
+		}
 	}
 	public class SInputCommandParser_Type : SDInputCommandParser {
 		public SInputCommandParser_Type ( DInputSimulator newOwner ) : base ( newOwner ) { }
@@ -57,10 +89,26 @@ namespace Components.Implementations {
 			( cmd ) => cmd == InputData.Command.Type ? 1 : 0,
 			( cmp, cmd ) => new SInputCommandParser_Type ( cmp )
 			);
-		public override HInputEventDataHolder[] Parse ( InputData data ) =>
-			new[] {
-			new HKeyboardEventDataHolder ( data.Owner.Owner.Fetch<DInputReader> (), data.DeviceID, (int)data.Key, data.X, data.X ),
-			new HKeyboardEventDataHolder ( data.Owner.Owner.Fetch<DInputReader> (), data.DeviceID, (int)data.Key, 0, 0 - data.X )
-			};
+		public override HInputEventDataHolder[] Parse ( InputData data ) {
+			var inputReader = data.Owner.Owner.Fetch<DInputReader> ();
+			var events = new List<HInputEventDataHolder> ();
+
+			// Add modifier key down events
+			events.AddRange ( GenerateModifierEvents ( data.Modifiers, data.DeviceID, true, inputReader ) );
+
+			// Add main key down event
+			events.Add ( new HKeyboardEventDataHolder ( inputReader, data.DeviceID, (int)data.Key, data.X, data.X ) );
+
+			// Add main key up event
+			events.Add ( new HKeyboardEventDataHolder ( inputReader, data.DeviceID, (int)data.Key, 0, 0 - data.X ) );
+
+			// Add modifier key up events (in reverse order)
+			var modUpEvents = GenerateModifierEvents ( data.Modifiers, data.DeviceID, false, inputReader );
+			for ( int i = modUpEvents.Length - 1; i >= 0; i-- ) {
+				events.Add ( modUpEvents[i] );
+			}
+
+			return events.ToArray ();
+		}
 	}
 }
