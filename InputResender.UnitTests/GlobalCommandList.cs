@@ -1,4 +1,5 @@
 ﻿using Components.Implementations;
+using Components.Implementations.UserApps;
 using Components.Interfaces;
 using Components.Interfaces.Commands;
 using Components.Library;
@@ -24,6 +25,7 @@ internal class GlobalCommandList<CoreT> where CoreT : CoreBase {
 		typeof( HookManagerCommand ),
 		typeof( ScriptedInputProcessorCommand ),
 		typeof( VTapperInputCommand ),
+		typeof( VTapperLearner ),
 		typeof( ComponentCommandLoader ),
 		typeof( ExternalLoaderCommand ),
 		typeof( FileManagerCommand ),

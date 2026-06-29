@@ -9,6 +9,10 @@ namespace Components.Library {
 	[Flags]
 	public enum VKChangeMask { None = 0, KeyDown = 1, KeyUp = 2, SysKeyDown = 4, SysKeyUp = 8, MouseMove = 16, LButtonDown = 32, LButtonUp = 64, MouseWheel = 128, RButtonDown = 256, RButtonUp = 512 }
 
+	/// <summary>
+	/// Taken directly from Windows key mapping.
+	/// <para>Numbers and single alphabetic characters equal the ASCII values of digits and upper case letters.</para>
+	/// </summary>
 	public enum KeyCode {
 		/// <summary>The A key.</summary>
 		A = 65,

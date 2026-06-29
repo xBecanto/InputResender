@@ -29,16 +29,39 @@ public abstract class ComponentUIParameter (string name, string label, string de
 	}
 }
 
+/// <summary>
+/// Base class for typed UI parameters. Use this when you only care about the data type T
+/// and don't need to interact with the factory's CRTP pattern.
+/// </summary>
 public abstract class ComponentUIParameter<T> : ComponentUIParameter {
-	public T Value { get; private set; }
-	public bool IsReadOnly => Validator == null;
-	private readonly Func<ComponentUIParameter<T>, T, T> _UpdateValue;
+	public T Value { get; protected set; }
+	public abstract bool IsReadOnly { get; }
+
+	protected ComponentUIParameter ( string name, string label, string description )
+		: base ( name, label, description, typeof( T ) ) {
+	}
+
+	/// <summary>Test that new value is valid or return error message. Doesn't apply</summary>
+	public abstract (bool, string) Validate ( T newVal );
+
+	/// <summary>Apply the new value if valid, call Apply action and request update.</summary>
+	/// <returns>Validation status</returns>
+	public abstract (bool, string) ApplyValue ( T newVal );
+}
+
+/// <summary>
+/// Fully typed UI parameter with factory support. This is what factory methods construct.
+/// External consumers should prefer using ComponentUIParameter&lt;T&gt; for cleaner code.
+/// </summary>
+public abstract class ComponentUIParameter<T, TF> : ComponentUIParameter<T> where TF : UI_Factory<T, TF> {
+	public override bool IsReadOnly => Validator == null;
+	private readonly Func<ComponentUIParameter<T, TF>, T, T> _UpdateValue;
 	private readonly Func<T, T, (bool, string)> Validator;
 	/// <inheritdoc cref="UI_Factory{T}.WithPureApply(Action{T})"/>
 	private readonly Action<T> Apply;
 
-	protected ComponentUIParameter ( UI_Factory<T> factory )
-		: base (factory.Name, factory.Label, factory.Description, typeof( T )) {
+	protected ComponentUIParameter ( UI_Factory<T, TF> factory )
+		: base (factory.Name, factory.Label, factory.Description) {
 		_UpdateValue = factory.GetUpdater ();
 		Value = factory.InitialValue;
 		if ( Value == null && _UpdateValue == null )
@@ -58,8 +81,8 @@ public abstract class ComponentUIParameter<T> : ComponentUIParameter {
 		}
 	}
 
-	/// <summary>Test that new value is a valid or return error message. Doesn't apply</summary>
-	public (bool, string) Validate ( T newVal ) {
+	/// <summary>Test that new value is valid or return error message. Doesn't apply</summary>
+	public override (bool, string) Validate ( T newVal ) {
 		if ( Validator == null )
 			return ( false, "This parameter is read-only." );
 		return Validator ( newVal, Value );
@@ -67,7 +90,7 @@ public abstract class ComponentUIParameter<T> : ComponentUIParameter {
 
 	/// <summary>Apply the new value if valid, call Apply action (kinda 'main' onUpdate action) and request update that generates new value via Updater and assign to Value.</summary>
 	/// <returns>Validation status</returns>
-	public (bool, string) ApplyValue ( T newVal ) {
+	public override (bool, string) ApplyValue ( T newVal ) {
 		if (Validator == null)
 			throw new InvalidOperationException ( "This parameter is read-only." );
 		var (isValid, errorMessage) = Validator ( newVal, Value );
@@ -79,14 +102,14 @@ public abstract class ComponentUIParameter<T> : ComponentUIParameter {
 	}
 }
 
-public abstract class UI_Factory<T> {
+public abstract class UI_Factory<T, FT> where FT : UI_Factory<T, FT> {
 	public string Name { get; private set; }
 	public string Label { get; private set; }
 	public string Description { get; private set; }
 	private Func<T> PureUpdater;
 	private Func<T, T> ValuedUpdater;
-	private Func<ComponentUIParameter<T>, T> ReferencedUpdater;
-	private Func<ComponentUIParameter<T>, T, T> CombinedUpdater;
+	private Func<ComponentUIParameter<T, FT>, T> ReferencedUpdater;
+	private Func<ComponentUIParameter<T, FT>, T, T> CombinedUpdater;
 	private Func<T, T, (bool, string)> Validator;
 	private Action<T> Apply;
 	public readonly List<ComponentUIParameter> Updaters = [];
@@ -96,41 +119,41 @@ public abstract class UI_Factory<T> {
 	public ComponentUIParameter.RelativePosition Position { get; private set; } = ComponentUIParameter.RelativePosition.Below;
 
 
-	public virtual UI_Factory<T> WithName ( string name ) { Name = name; return this; }
-	public virtual UI_Factory<T> WithLabel ( string label ) { Label = label; return this; }
-	public virtual UI_Factory<T> WithDescription ( string description ) { Description = description; return this; }
+	public virtual FT WithName ( string name ) { Name = name; return (FT)this; }
+	public virtual FT WithLabel ( string label ) { Label = label; return (FT)this; }
+	public virtual FT WithDescription ( string description ) { Description = description; return (FT)this; }
 	/// <summary>Updater that doesn't rely on anything else. Updater will fetch the new value and later on will be assigned (during ApplyValue->RequestUpdate)</summary>
-	public virtual UI_Factory<T> WithPureUpdater ( Func<T> updater ) { PureUpdater = updater; return this; }
-	public virtual UI_Factory<T> WithReferencedUpdater ( Func<ComponentUIParameter<T>, T> updater ) { ReferencedUpdater = updater; return this; }
-	public virtual UI_Factory<T> WithValuedUpdater ( Func<T, T> updater ) { ValuedUpdater = updater; return this; }
-	public virtual UI_Factory<T> WithCombinedUpdater ( Func<ComponentUIParameter<T>, T, T> updater ) { CombinedUpdater = updater; return this; }
-	public virtual UI_Factory<T> WithPureValidator ( Func<T, T, (bool, string)> validator ) { Validator = validator; return this; }
+	public virtual FT WithPureUpdater ( Func<T> updater ) { PureUpdater = updater; return (FT)this; }
+	public virtual FT WithReferencedUpdater ( Func<ComponentUIParameter<T, FT>, T> updater ) { ReferencedUpdater = updater; return (FT)this; }
+	public virtual FT WithValuedUpdater ( Func<T, T> updater ) { ValuedUpdater = updater; return (FT)this; }
+	public virtual FT WithCombinedUpdater ( Func<ComponentUIParameter<T, FT>, T, T> updater ) { CombinedUpdater = updater; return (FT)this; }
+	public virtual FT WithPureValidator ( Func<T, T, (bool, string)> validator ) { Validator = validator; return (FT)this; }
 	/// <summary>Apply action that will be called during ApplyValue if validation is successful.
 	/// Will not set the new value (that is done automatically after this), but serve as a place to perform any side effects.</summary>
-	public virtual UI_Factory<T> WithPureApply ( Action<T> apply ) { Apply = apply; return this; }
-	public virtual UI_Factory<T> WithPosition ( ComponentUIParameter.RelativePosition position ) { Position = position; return this; }
-	public virtual UI_Factory<T> PreferOnRight () => WithPosition ( ComponentUIParameter.RelativePosition.Right );
+	public virtual FT WithPureApply ( Action<T> apply ) { Apply = apply; return (FT)this; }
+	public virtual FT WithPosition ( ComponentUIParameter.RelativePosition position ) { Position = position; return (FT)this; }
+	public virtual FT PreferOnRight () => WithPosition ( ComponentUIParameter.RelativePosition.Right );
 
-	public virtual UI_Factory<T> AssertDynamic () {
+	public virtual FT AssertDynamic () {
 		if ( GetUpdater () == null ) throw new InvalidOperationException ( "At least one type of updater must be set for a dynamic parameter." );
 
 		var (validator, applier) = GetValidator ( InitialValue ?? default, InitialValue ?? default );
 		if ( validator == null || applier == null ) throw new InvalidOperationException ( "Validator and Apply action must be set together for a dynamic parameter." );
 
-		return this;
+		return (FT)this;
 	}
 
 
-	public UI_Factory<T> ForceDynamic () {
+	public FT ForceDynamic () {
 		IsReadonly = IsConstant = false;
 		WithPureValidator ( DefaultValidator ).WithPureApply ( _ => { } );
-		return this;
+		return (FT)this;
 	}
 
-	public virtual UI_Factory<T> ForceReadOnly () { IsReadonly = true; return this; }
-	public virtual UI_Factory<T> ForceConstant () { IsConstant = true; return this; }
-	public virtual UI_Factory<T> UpdatedBy ( ComponentUIParameter other ) { Updaters.Add ( other ); return this; }
-	public virtual UI_Factory<T> WithInitialValue ( T initialValue ) { InitialValue = initialValue; return this; }
+	public virtual FT ForceReadOnly () { IsReadonly = true; return (FT)this; }
+	public virtual FT ForceConstant () { IsConstant = true; return (FT)this; }
+	public virtual FT UpdatedBy ( ComponentUIParameter other ) { Updaters.Add ( other ); return (FT)this; }
+	public virtual FT WithInitialValue ( T initialValue ) { InitialValue = initialValue; return (FT)this; }
 
 	public ComponentUIParameter Build () {
 		ArgumentNullException.ThrowIfNullOrWhiteSpace ( Name, nameof(Name) );
@@ -141,8 +164,8 @@ public abstract class UI_Factory<T> {
 			updater.OnDataChanged += ( _ ) => ret.RequestUpdate ();
 		return ret;
 	}
-	public P Build<P> () where P : ComponentUIParameter<T> {
-		if ( typeof ( P ) != typeof ( ComponentUIParameter<T> ) && !typeof ( P ).IsSubclassOf ( typeof ( ComponentUIParameter<T> ) ) )
+	public P Build<P> () where P : ComponentUIParameter<T, FT> {
+		if ( typeof ( P ) != typeof ( ComponentUIParameter<T, FT> ) && !typeof ( P ).IsSubclassOf ( typeof ( ComponentUIParameter<T, FT> ) ) )
 			throw new InvalidOperationException ( $"Type parameter P must be ComponentUIParameter<{typeof(T).Name}> or its subclass." );
 
 		return Build () as P;
@@ -150,8 +173,8 @@ public abstract class UI_Factory<T> {
 	protected abstract ComponentUIParameter BuildInner ();
 	protected abstract (bool, string) DefaultValidator ( T newVal, T oldVal );
 
-	public Func<ComponentUIParameter<T>, T, T> GetUpdater () {
-		Func<ComponentUIParameter<T>, T, T> ret = null;
+	public Func<ComponentUIParameter<T, FT>, T, T> GetUpdater () {
+		Func<ComponentUIParameter<T, FT>, T, T> ret = null;
 		if ( IsConstant ) ret = null;
 		else if ( PureUpdater != null ) ret = ( _, __ ) => PureUpdater ();
 		else if ( ReferencedUpdater != null ) ret = ( param, _ ) => ReferencedUpdater ( param );
@@ -179,10 +202,10 @@ public abstract class UI_Factory<T> {
 	}
 }
 
-public class UI_IntField : ComponentUIParameter<int> {
+public class UI_IntField : ComponentUIParameter<int, UI_IntField.Factory> {
 	protected UI_IntField (Factory factory) : base (factory) { }
 
-	public class Factory : UI_Factory<int> {
+	public class Factory : UI_Factory<int, Factory> {
 		protected override UI_IntField BuildInner () {
 			return new (this);
 		}
@@ -195,12 +218,12 @@ public class UI_IntField : ComponentUIParameter<int> {
 	}
 }
 
-public class UI_ListView : ComponentUIParameter<List<string>> {
+public class UI_ListView : ComponentUIParameter<List<string>, UI_ListView.Factory> {
 	public readonly IReadOnlyList<ComponentUIParameter> SubParameters;
 
 	protected UI_ListView (Factory factory) : base (factory) { }
 
-	public class Factory : UI_Factory<List<string>> {
+	public class Factory : UI_Factory<List<string>, Factory> {
 		public Factory UpdatedByDropDown ( UI_DropDown controller, Func<int, List<string>> updateValue ) {
 			WithPureUpdater ( () => {
 				ArgumentNullException.ThrowIfNull ( controller, nameof(controller) );
@@ -226,7 +249,7 @@ public class UI_ListView : ComponentUIParameter<List<string>> {
 	}
 }
 
-public class UI_DropDown : ComponentUIParameter<(int selID, List<string> options)> {
+public class UI_DropDown : ComponentUIParameter<(int selID, List<string> options), UI_DropDown.Factory> {
 	protected UI_DropDown (Factory factory) : base (factory) { }
 
 	/// <inheritdoc cref="ComponentUIParameter{T}.Validate(T)"/>
@@ -242,7 +265,7 @@ public class UI_DropDown : ComponentUIParameter<(int selID, List<string> options
 		return (true, null);
 	}
 
-	public class Factory : UI_Factory<(int selID, List<string> opts)> {
+	public class Factory : UI_Factory<(int selID, List<string> opts), Factory> {
 		private UI_DropDown builtInstance; // Ugly hack, please expand the validation/apply actions with caller reference later on. 🙏
 		public Factory WithOptionUpdator ( Func<List<string>> optionGetter ) { WithValuedUpdater ( (old) => (old.selID, optionGetter ()) ); return this; }
 		public Factory WithEmptyOption (string emptyOptionText = " -- ") {
@@ -281,10 +304,10 @@ public class UI_DropDown : ComponentUIParameter<(int selID, List<string> options
 	}
 }
 
-public class UI_TextField : ComponentUIParameter<string> {
+public class UI_TextField : ComponentUIParameter<string, UI_TextField.Factory> {
 	protected UI_TextField (Factory factory) : base (factory) { }
 
-	public class Factory : UI_Factory<string> {
+	public class Factory : UI_Factory<string, Factory> {
 		protected override UI_TextField BuildInner () {
 			return new ( this );
 		}
@@ -296,14 +319,14 @@ public class UI_TextField : ComponentUIParameter<string> {
 }
 
 
-public class UI_ActionButton : ComponentUIParameter<bool> {
+public class UI_ActionButton : ComponentUIParameter<bool, UI_ActionButton.Factory> {
 	protected UI_ActionButton ( Factory factory, Action onClick ) : base ( factory ) {
 		OnClick = onClick;
 	}
 
 	public readonly Action OnClick;
 
-	public class Factory : UI_Factory<bool> {
+	public class Factory : UI_Factory<bool, Factory> {
 		protected Action _onClick;
 		public Factory WithOnClick ( Action onClick ) { _onClick = onClick; return this; }
 		protected override UI_ActionButton BuildInner () => new ( this, _onClick );
@@ -312,7 +335,7 @@ public class UI_ActionButton : ComponentUIParameter<bool> {
 	}
 }
 
-public class UI_Separator : ComponentUIParameter<bool> {
+public class UI_Separator : ComponentUIParameter<bool, UI_Separator.Factory> {
 	public enum SepType { Major, Header, Minor, Line, Space }
 	public readonly SepType SeparatorType;
 
@@ -320,7 +343,7 @@ public class UI_Separator : ComponentUIParameter<bool> {
 		SeparatorType = factory.SeparatorType;
 	}
 
-	public class Factory : UI_Factory<bool> {
+	public class Factory : UI_Factory<bool, Factory> {
 		public SepType SeparatorType { get; private set; } = SepType.Minor;
 		/// <summary>Major separator, usually used to separate different sections. Like 'user' and 'admin' sections.</summary>
 		public Factory AsMajor () { SeparatorType = SepType.Major; return this; }
@@ -384,7 +407,7 @@ public class ComponentUIParametersInfo : ComponentUIParameter {
 	}
 	protected override void RequestUpdateValue () { }
 
-	public class Factory : UI_Factory<IReadOnlyList<ComponentUIParameter>> {
+	public class Factory : UI_Factory<IReadOnlyList<ComponentUIParameter>, Factory> {
 		private static readonly object IDCounterLock = new ();
 		private static int DefaultIDCounter = 21; // Only adults are allowd 😉 Any non-zero number if fine.
 		private int GroupID = -1;

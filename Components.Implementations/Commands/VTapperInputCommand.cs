@@ -13,7 +13,9 @@ public class VTapperInputCommand : DCommand<DMainAppCore> {
 		("force", null),
 		("wait", null),
 		("keys", null),
-		("mapping", null)
+		("mapping", null),
+		("condition", null),
+		("verbosity", null)
 	];
 
 	public VTapperInputCommand ( DMainAppCore owner, string parentDsc = null )
@@ -143,7 +145,7 @@ public class VTapperInputCommand : DCommand<DMainAppCore> {
 		return keys;
 	}
 
-	private static int ParseComboPattern ( string pattern ) {
+	internal static int ParseComboPattern ( string pattern ) {
 		if ( pattern == null || pattern.Length != 5 )
 			throw new ArgumentException ( "Combo pattern must be exactly 5 characters (X or -).", nameof ( pattern ) );
 		int combo = 0;

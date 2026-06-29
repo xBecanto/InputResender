@@ -170,7 +170,7 @@ public class Config : ComponentBase<DMainAppCore> {
 					if ( node.InnerText == HomePath || node.InnerText == SavePath )
 						break;
 					HomePath = node.InnerText;
-					if ( Load ( HomePath ) ) {
+					if ( Load ( SavePath ) ) {
 						SkipAutoSave = oldSkipAutoSave;
 						return true;
 					}

@@ -1,4 +1,4 @@
-91Q6ntol5zK2GgPoVIlTZFduoA2QBRDRdGwiph0VO+k=
+olhrCOFJ9RpcdZZo0zFYoJ7quntFn+BASNCVVs0lAbM=
 <Config>
   <AutostartName>initCmds</AutostartName>
   <PrintAutoCommands>T</PrintAutoCommands>
@@ -139,5 +139,22 @@
       <tr5>pipeline new ReadInputAndProcess exact=SHookManager DInputMerger VTapperInput origin</tr5>
       <tr6>hook add Fast Pipeline Keydown KeyUp</tr6>
     </tapperRun>
+    <LearnTap>
+      <L00>windows load --force</L00>
+      <L01>windows msgs start</L01>
+      <L02>load joiners</L02>
+      <L03>auto run tapper</L03>
+      <L04>hook manager start</L04>
+      <L05>hook manager verbosity 0</L05>
+      <L06>tapper force A S D F Space CapsLock Scroll</L06>
+      <L07>tapper verbosity 0</L07>
+      <L08>TapLearn assign</L08>
+      <L09>TapLearn rip</L09>
+      <L10>TapLearn learn "hello world"</L10>
+      <L11>pipeline new LocalCallback DInputProcessor VTapperLearner</L11>
+      <L12>pipeline new ReadInputAndProcess exact=SHookManager DInputMerger VTapperInput origin</L12>
+      <L13>hook add Fast Pipeline Keydown KeyUp</L13>
+      <L42>Blazor start</L42>
+    </LearnTap>
   </AutoCommands>
 </Config>

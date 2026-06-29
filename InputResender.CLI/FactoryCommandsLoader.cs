@@ -1,4 +1,5 @@
 ﻿using Components.Implementations;
+using Components.Implementations.UserApps;
 using Components.Interfaces.Commands;
 using Components.Library;
 using Components.Library.ComponentSystem;
@@ -46,6 +47,7 @@ public class InputCommandsLoader : ACommandLoader<DMainAppCore> {
 		{ typeof(HookManagerCommand), ( core ) => new HookManagerCommand ( core ) },
 		{ typeof(ScriptedInputProcessorCommand), ( core ) => new ScriptedInputProcessorCommand ( core ) },
 		{ typeof(VTapperInputCommand), ( core ) => new VTapperInputCommand ( core ) },
+		{ typeof(VTapperLearner), ( core ) => new VTapperLearner ( core ) },
 	};
 	protected override IReadOnlyCollection<Func<DMainAppCore, DCommand<DMainAppCore>>> NewCommands
 		=> NewCommandList.Values.Select<Func<DMainAppCore, DCommand<DMainAppCore>>, Func<DMainAppCore, DCommand<DMainAppCore>>>( f

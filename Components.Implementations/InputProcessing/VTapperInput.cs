@@ -5,14 +5,14 @@ using ModE = Components.Interfaces.InputData.Modifier;
 
 namespace Components.Implementations {
 	public class VTapperInput : DInputProcessor {
-		enum StateType { Normal, Shift, Switch }
+		public enum StateType { Normal, Shift, Switch }
 		public static readonly string[] MappingNames = ["Single", "Double", "Triple", "Shift", "Switch"];
 		public const int MappingCount = 5;
 		public const int ComboCount = 32; // 2^5 trigger keys
 
 		private readonly (KeyCode key, ModE mod)[][] mapping = new (KeyCode, ModE)[5][] { [
 				(KeyCode.Scroll, ModE.None), (KeyCode.O, ModE.None), (KeyCode.I, ModE.None), (KeyCode.F, ModE.None),
-				(KeyCode.E, ModE.None), (KeyCode.Space, ModE.None), (KeyCode.S, ModE.None), (KeyCode.NoName, ModE.None),
+				(KeyCode.E, ModE.None), (KeyCode.Space, ModE.None), (KeyCode.S, ModE.None), (KeyCode.Scroll, ModE.None),
 				(KeyCode.A, ModE.None), (KeyCode.B, ModE.None), (KeyCode.R, ModE.None), (KeyCode.Y, ModE.None),
 				(KeyCode.N, ModE.None), (KeyCode.Down, ModE.None), (KeyCode.K, ModE.None), (KeyCode.L, ModE.None),
 				(KeyCode.T, ModE.None), (KeyCode.M, ModE.None), (KeyCode.P, ModE.None), (KeyCode.V, ModE.None),
@@ -21,7 +21,7 @@ namespace Components.Implementations {
 				(KeyCode.CapsLock, ModE.None), (KeyCode.LineFeed, ModE.None), (KeyCode.J, ModE.None), (KeyCode.C, ModE.None),
 			], [
 				(KeyCode.Scroll, ModE.None), (KeyCode.LineFeed, ModE.None), (KeyCode.Tab, ModE.None), (KeyCode.OemCloseBrackets, ModE.None),
-				(KeyCode.Space, ModE.None), (KeyCode.Scroll, ModE.None), (KeyCode.OemOpenBrackets, ModE.None), (KeyCode.NoName, ModE.None),
+				(KeyCode.Space, ModE.None), (KeyCode.Scroll, ModE.None), (KeyCode.OemOpenBrackets, ModE.None), (KeyCode.Scroll, ModE.None),
 				(KeyCode.Back, ModE.None), (KeyCode.OemSemicolon, ModE.Shift), (KeyCode.D0, ModE.Shift), (KeyCode.OemBackslash, ModE.None),
 				(KeyCode.D9, ModE.Shift), (KeyCode.Scroll, ModE.None), (KeyCode.OemMinus, ModE.None), (KeyCode.OemMinus, ModE.Shift),
 				(KeyCode.Oemcomma, ModE.None), (KeyCode.OemPeriod, ModE.None), (KeyCode.OemCloseBrackets, ModE.Shift), (KeyCode.OemQuotes, ModE.Shift),
@@ -63,7 +63,7 @@ namespace Components.Implementations {
 		private ModE TriggerMod;
 		int Presses = 0;
 		BitField LastTapCombo = new BitField ();
-		StateType State = StateType.Normal;
+		public StateType State { get; private set; } = StateType.Normal;
 		InputData LastRet = null;
 		DateTime LastPress;
 		public int WaitTime = 350;
