@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 
@@ -81,4 +82,43 @@ public class FileAccessService {
 			throw new DirectoryNotFoundException ( $"Could not find asset path: {dir.FullName}" );
 		return dir.Parent;
 	}
+}
+
+public class StreamBasedFileService : FileAccessService {
+	private readonly Dictionary<string, Stream> inputStreams = [];
+	private readonly Dictionary<string, Stream> outputStreams = [];
+
+	public void RegisterInputStream ( string name, Stream stream ) => inputStreams[name] = stream;
+	public void RegisterOutputStream ( string name, Stream stream ) => outputStreams[name] = stream;
+	public void UnregisterInputStream ( string name ) => inputStreams.Remove ( name );
+	public void UnregisterOutputStream ( string name ) => outputStreams.Remove ( name );
+	public void ClearAllStreams () {
+		inputStreams.Clear ();
+		outputStreams.Clear ();
+	}
+
+	public override bool Exists ( string path ) => inputStreams.ContainsKey ( path ) || outputStreams.ContainsKey ( path );
+
+	public override string ReadAllText ( string path ) {
+		if ( !inputStreams.TryGetValue ( path, out var stream ) )
+			throw new FileNotFoundException ( $"No input stream registered with name: {path}" );
+		using StreamReader reader = new ( stream, leaveOpen: true );
+		return reader.ReadToEnd ();
+	}
+
+	public override byte[] ReadAllBytes ( string path ) {
+		if ( !inputStreams.TryGetValue ( path, out var stream ) )
+			throw new FileNotFoundException ( $"No input stream registered with name: {path}" );
+		using MemoryStream ms = new ();
+		stream.CopyTo ( ms );
+		return ms.ToArray ();
+	}
+
+	public override StreamWriter CreateText ( string path ) {
+		if ( !outputStreams.TryGetValue ( path, out var stream ) )
+			throw new FileNotFoundException ( $"No output stream registered with name: {path}" );
+		return new StreamWriter ( stream, leaveOpen: true );
+	}
+
+	public override DirectoryInfo[] GetDirectories ( DirectoryInfo dir ) => [];
 }

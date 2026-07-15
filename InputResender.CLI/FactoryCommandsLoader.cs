@@ -26,6 +26,7 @@ public class FactoryCommandsLoader : ACommandLoader<DMainAppCore> {
 		{ typeof(BlazorManagerCommand), ( core ) => new BlazorManagerCommand ( core ) },
 		{ typeof(ExternalLoaderCommand), ( core ) => new ExternalLoaderCommand ( core ) },
 		{ typeof(FileManagerCommand), ( core ) => new FileManagerCommand ( core ) },
+		{ typeof(UpdateCommand), ( core ) => new UpdateCommand ( core ) },
 	};
 	private static Dictionary<Type, (string, Func<DCommand<DMainAppCore>, DCommand<DMainAppCore>>)> NewSubCommandList = new () {
 		{ typeof (CoreCreatorCommand), ("core", ( parent ) => {
