@@ -8,6 +8,8 @@ namespace InputResender.CLI;
 public static class Program {
 	public static bool StartMain ( string[] args, ACommandLoader<DMainAppCore> TLLoader, CliWrapper cliWrapper ) {
 		ArgParser parser = new ( string.Join ( " ", args ), cliWrapper.Console.WriteLine );
+		parser.RegisterSwitch ( 'i', "inline" );
+		parser.RegisterSwitch ( 'v', "virtual" );
 		//if ( !Config.Load ( parser.String ( "cfg", null ) ) )
 		//	Config.Save (); // Couldn't load configuration, save the current one
 		DMainAppCore core = cliWrapper.CmdProc.Owner;
@@ -21,33 +23,81 @@ public static class Program {
 		core.FileManager.FileManagerWrapper ??= new FileManagerCLIWrapper ( cliWrapper );
 
 		Config cfg = core.Fetch<Config> ();
-		if ( cfg == null ) {
-			string defConfigPath = parser.String ( "cfg", "Config path", -1 );
-			string password = parser.String ( "pass", "Config password", -1 );
-			while ( string.IsNullOrWhiteSpace ( password ) ) {
-				cliWrapper.Console.WriteLine ( "Please enter a password for configuration file:" );
-				password = cliWrapper.Console.ReadLineBlocking ();
-			}
+		bool inline = parser.Present ( "--inline" );
+		string firstArgPath = null;
+		if ( parser.ArgC > 0 ) {
+			string firstArg = parser.String ( 0, null );
+			if ( System.IO.File.Exists ( firstArg ) ) {
+				firstArgPath = firstArg;
+				if (firstArgPath.EndsWith ( ".scl" ))
+					throw new NotImplementedException ( "SCL script execution is not implemented yet! :(" );
 
-			PasswordHolder psswd = new (password);
-			cfg = new Config ( defConfigPath, psswd, core );
+				else if ( firstArgPath.EndsWith ( ".cfg" ) || firstArgPath.EndsWith ( ".xml" ) )
+					LoadConfig ( firstArgPath );
+
+				else throw new InvalidOperationException ( $"Unknown file type for '{firstArgPath}'! Only .cfg and .xml are supported for now." );
+			}
 		}
+
+		if ( parser.HasValue ( "cfg", true ) ) {
+			LoadConfig ( parser.String ( "cfg", "Config path", -1 ) );
+			parser.Remove ( "cfg" );
+		}
+
+		if ( cfg == null )
+			LoadConfig ( parser.Present ( "--virtual" ) ? Config.VIRTUAL_INIT_PATH : Config.DEFAULT_INIT_PATH );
+
 
 		cliWrapper.CmdProc.AddCommand ( new BasicCommands<DMainAppCore> ( core, cliWrapper.Console.WriteLine, cliWrapper.Console.Clear, () => { /* Cleanup is done after main loop */ } ) );
 		cliWrapper.CmdProc.AddCommand ( new FactoryCommandsLoader ( core ) );
 		cliWrapper.CmdProc.AddCommand ( new InputCommandsLoader ( core ) );
 		if ( TLLoader != null ) cliWrapper.CmdProc.AddCommand ( TLLoader );
 
-		var startCommands = cfg.FetchAutoCommands ( cfg.AutostartName );
-		foreach ( var cmd in startCommands ) {
-			if ( cmd == "exit" ) return false;
-			if ( cfg.PrintAutoCommands ) cliWrapper.ProcessLine ( cmd, true );
-			else cliWrapper.CmdProc.ProcessLine ( cmd );
+		if ( !inline ) {
+			var startCommands = cfg.FetchAutoCommands ( cfg.AutostartName );
+			foreach ( var cmd in startCommands ) {
+				if ( cmd == "exit" ) return false;
+				if ( cfg.PrintAutoCommands ) cliWrapper.ProcessLine ( cmd, true );
+				else cliWrapper.CmdProc.ProcessLine ( cmd );
+			}
 		}
+
+		for (int i = 0; i < parser.ArgC; i++) {
+			string cmd = parser.String ( i, null );
+			if ( cmd == "exit" ) return false;
+			cliWrapper.ProcessLine ( cmd, true );
+		}
+
+		if ( inline ) return false;
 
 		cliWrapper.Console.WriteLine ( "Program started. Type 'help' for a list of commands. Type 'exit' to close the program." );
 		return true;
+
+
+
+		void LoadConfig ( string path ) {
+			if ( cfg != null ) throw new NotImplementedException ( "Reloading configs is not implemented yet!" );
+
+			string password = null;
+			if (parser.HasValue ( "pass", true )) {
+				password = parser.String ( "pass", "Config password", -1 );
+				parser.Remove ( "pass" );
+			}
+			if ( string.IsNullOrWhiteSpace ( password ) ) {
+				if ( inline || path == Config.VIRTUAL_INIT_PATH ) password = "ConfigDefPass";
+				else {
+					while ( string.IsNullOrWhiteSpace ( password ) ) {
+						cliWrapper.Console.WriteLine ( "Please enter a password for configuration file:" );
+						password = cliWrapper.Console.ReadLineBlocking ();
+					}
+				}
+			}
+
+			PasswordHolder psswd = new (password);
+			cfg = new ( path, psswd, core );
+		}
 	}
+
 
 	public static void MainRun ( CliWrapper cliWrapper ) {
 		while ( true ) {
@@ -60,8 +110,8 @@ public static class Program {
 		cliWrapper.Console.WriteLine ( "Program closed." );
 	}
 
-	public static void Main ( string[] args, DMainAppCore core, ACommandLoader<DMainAppCore> TLLoader, ConsoleManager console ) {
-		CliWrapper cliWrapper = new ( core, console );
+	public static void Main ( string[] args, DMainAppCore initialCore, ACommandLoader<DMainAppCore> TLLoader, ConsoleManager console ) {
+		CliWrapper cliWrapper = new ( initialCore, console );
 		if ( !StartMain ( args, TLLoader, cliWrapper ) ) return;
 		MainRun ( cliWrapper );
 	}

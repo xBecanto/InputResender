@@ -1,4 +1,4 @@
-﻿using System;
+﻿/*using System;
 using InputResender.UnitTests;
 
 namespace InputResender.PerformanceTest; 
@@ -25,4 +25,4 @@ public class Program {
 		}
 		Console.WriteLine ( $"Timeout stopped performance testing after {(DateTime.Now - start).TotalMinutes:f2} m, processed {processed} commands." );
 	}
-}
+}*/

@@ -13,7 +13,7 @@ public class ArgParser {
 		/// <summary>Marks that the value was explicitly specified (e.g. "A=1":true vs "A 1":false).</summary>
 		public bool ValSpecified;
 
-		override public string ToString () => $"{Name}#{Position} = {Value}";
+		public override string ToString () => $"{Name}#{Position} = {Value}";
 
 		public Arg ( int pos, string name, string value, bool valSpec ) {
 			Position = pos;
@@ -31,6 +31,7 @@ public class ArgParser {
 			bool readingName = true;
 			bool isEscaped = false;
 			bool isQuoted = false;
+			int parDepth = 0;
 			string arg = string.Empty;
 
 			for ( int N = line.Length; pos < N; pos++ ) {
@@ -45,10 +46,27 @@ public class ArgParser {
 					isEscaped = false;
 					continue;
 				}
-				if ( line[pos] == '\\' ) { isEscaped = true; continue; }
-				if ( line[pos] == '"' ) isQuoted = !isQuoted;
-				else arg += line[pos];
-				if ( isQuoted ) continue;
+
+				if ( parDepth > 0 ) {
+					switch ( line[pos] ) {
+					case '(': parDepth++; break;
+					case ')': parDepth--; break;
+					default:  arg += line[pos]; break;
+					}
+					if ( parDepth > 0 ) continue;
+				} else {
+					switch ( line[pos] ) {
+					case '\\':
+						isEscaped = true;
+						continue;
+					case '"': isQuoted = !isQuoted; break;
+					case '(': parDepth++; break;
+					case ')': parDepth--; break;
+					default:  arg += line[pos]; break;
+					}
+
+					if ( isQuoted || parDepth > 0 ) continue;
+				}
 
 				if ( pos == N - 1 ) {
 					// End of line
@@ -74,6 +92,8 @@ public class ArgParser {
 			}
 		}
 	}
+
+	public override string ToString () => $"Args: {string.Join ( " ", SwitchesChar.Keys.Select ( c => $"-{c}" ) )} {string.Join ( " ", Args.Select ( a => $"{a.Name}={a.Value}" ) )}";
 
 	private readonly Dictionary<string, Arg> SwitchesName;
 	private readonly Dictionary<char, Arg> SwitchesChar;
@@ -357,5 +377,22 @@ public class ArgParser {
 			else Output ( message );
 		}
 		return defVal;
+	}
+
+	public void Remove (int id, bool shouldThrow = true) {
+		if (id < 0 || id >= ArgC) {
+			if (shouldThrow) throw new ArgumentOutOfRangeException(nameof(id), $"Argument index {id} is out of range.");
+			return;
+		}
+		Args.RemoveAt(id);
+		for (int i = id; i < ArgC; i++) Args[i].Position--;
+	}
+	public void Remove (string id, bool shouldThrow = true) {
+		var arg = this[id];
+		if (arg?.value == null) {
+			if (shouldThrow) throw new ArgumentException($"Argument '{id}' not found.", nameof(id));
+			return;
+		}
+		Remove(arg.value.Position, shouldThrow);
 	}
 }

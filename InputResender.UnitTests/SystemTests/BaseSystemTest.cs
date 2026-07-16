@@ -54,7 +54,8 @@ public abstract class BaseSystemTest : IDisposable {
 		Program.StartMain (
 			[$"cfg={di.FullName.Replace ( "\\", "\\\\" )} pass=asdf"]
 			, new TopLevelLoader ( Core, StdStream.ConsoleWrapper )
-			, MainCliWrapper );
+			, MainCliWrapper
+		).Should ().BeTrue ( "Main program should start successfully." );
 
 		MainTask = new ( () => {
 			Program.MainRun ( MainCliWrapper );

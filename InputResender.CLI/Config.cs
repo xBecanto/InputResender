@@ -9,6 +9,8 @@ using System.Collections.Generic;
 
 namespace InputResender.CLI;
 public class Config : ComponentBase<DMainAppCore> {
+	public const string DEFAULT_INIT_PATH = "default";
+	public const string VIRTUAL_INIT_PATH = "virtual";
 	const string ConfigFileName = "config.xml";
 
 	private bool SkipAutoSave = false;
@@ -28,10 +30,15 @@ public class Config : ComponentBase<DMainAppCore> {
 			| FileAccessService.SearchOptions.SolutionFolder
 			| FileAccessService.SearchOptions.SubDirectories;
 		if ( string.IsNullOrWhiteSpace ( initPath ) ) initPath = AppDomain.CurrentDomain.BaseDirectory;
-		if ( initPath == "default" ) {
+		if ( initPath == DEFAULT_INIT_PATH ) {
 			savePath = initPath;
 			homePath = Path.GetDirectoryName ( savePath );
 			configPassword = password;
+		} else if ( initPath == VIRTUAL_INIT_PATH ) {
+			savePath = AppDomain.CurrentDomain.BaseDirectory;
+			homePath = Path.GetDirectoryName ( savePath );
+			configPassword = password ?? new ("ConfigPassword");
+			SkipAutoSave = true;
 		} else {
 			savePath = FileManager.FileService.GetAssetPath ( initPath, ConfigFileName, searchOptions );
 			homePath = Path.GetDirectoryName ( savePath );
