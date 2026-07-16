@@ -18,6 +18,7 @@ using System.Windows.Forms.VisualStyles;
 using InputResender.WebUI.Commands;
 
 namespace InputResender.UnitTests;
+
 internal class GlobalCommandList<CoreT> where CoreT : CoreBase {
 	public static readonly List<Type> allCmdTypes = [
 		typeof( ConnectionManagerCommand ),
@@ -49,6 +50,7 @@ internal class GlobalCommandList<CoreT> where CoreT : CoreBase {
 		typeof( LoaderCommand ),
 		typeof( PWDCommand ),
 		typeof( AutoCmdsCommand ),
+		typeof( UpdateCommand ),
 		typeof( InputCommandsLoader ),
 		typeof( SeClavCommandLoader ),
 		typeof( BlazorManagerCommand ),
@@ -57,6 +59,7 @@ internal class GlobalCommandList<CoreT> where CoreT : CoreBase {
 		typeof( GUICommands ),
 		typeof( TopLevelLoader ),
 		typeof( ComponentVisualizer.ComponentVisualizerCommands ),
+		typeof( PerformanceTestCommand ),
 		];
 	public static readonly List<Type> LoadersExamples = [
 		typeof ( TopLevelLoader ),
@@ -99,88 +102,23 @@ internal class GlobalCommandList<CoreT> where CoreT : CoreBase {
 		( typeof(BasicCommands<CoreT>), "exit" ),
 		( typeof(BasicCommands<CoreT>), "loglevel" ),
 	];
-	/*public readonly Dictionary<Type, List<string>> CommandList = new () {
-		{ typeof (ConnectionManagerCommand), ["conns", "conns list", "conns send", "conns close", "conns callback"] },
-		{ typeof (CoreCreatorCommand), ["core new", "core create"] },
-		{ typeof ( HookManagerCommand ), ["hook", "hook manager", "hook manager start", "hook manager status", "hook list", "hook add", "hook remove"] },
 
-		{ typeof ( InputSimulatorCommand ), ["sim", "sim mousemove", "sim keydown", "sim keyup", "sim keypress"] },
-		{ typeof (PasswordManagerCommand), ["password", "pw", "password add", "pw add", "password print", "pw print"] },
-		{ typeof (TargetManagerCommand), ["target", "tEP", "target set", "tEP set"] },
-		{ typeof (HookCallbackManagerCommand), ["hookcb", "hookcb list", "hookcb set", "hookcb active"] },
-		{ typeof ( NetworkManagerCommand ), ["network", "network hostlist", "network conn", "network callback", "network info"] },
-		{ typeof (ListHostsNetworkCommand), ["network hostlist"] },
-		{ typeof (NetworkConnsManagerCommand), ["network conn", "network conn list", "network conn send"] },
-		{ typeof (NetworkCallbacks), ["network callback", "network callback list", "network callback recv", "network callback newconn"] },
-		{ typeof (EndPointInfoCommand), ["network info"] },
-
-		{ typeof ( BasicCommands ), ["safemode", "loadall", "argParse", "argerrorlvl", "loglevel"] },
-		{ typeof (ContextVarCommands), ["context", "context set", "context get", "context reset", "context add"] },
-		{ typeof ( CoreManagerCommand ), ["core", "core act", "core typeof"] },
-
-		{ typeof (DebugCommand), ["debug"] },
-		{ typeof (GUICommands), ["gui", "gui start", "gui stop"] },
-		{ typeof (ComponentVisualizer.ComponentVisualizerCommands), ["visualizer", "visualizer start", "visualizer stop", "visualizer update", "visualizer status"] },
-		{ typeof (WindowsCommands), ["windows", "windows load"] },
-		{ typeof (LowLevelInputCommand), ["hook inpll", "hook inpll list"] },
-		{ typeof (SeClavRunnerCommand), ["seclav"] },
-		{ typeof (SeClavModuleManagerCommand), ["seclav module", "seclav module list", "seclav module load"] },
-	};*/
-
-	/*public readonly Dictionary<Type, List<Type>> Loaders = new () {
-		{typeof(TopLevelLoader), [typeof(GUICommands), typeof(ComponentVisualizer.ComponentVisualizerCommands), typeof(WindowsCommands), typeof (LowLevelInputCommand)] },
-		{typeof(FactoryCommandsLoader), [typeof(CoreManagerCommand), typeof(ConnectionManagerCommand), typeof(ComponentCommandLoader), typeof(ContextVarCommands), typeof(DebugCommand), typeof(CoreCreatorCommand)] },
-		{typeof(ComponentCommandLoader), [typeof(NetworkManagerCommand), typeof(PasswordManagerCommand), typeof(TargetManagerCommand), typeof(HookCallbackManagerCommand)] },
-		{typeof(InputCommandsLoader), [typeof(InputSimulatorCommand), typeof(HookManagerCommand)] },
-		{typeof(NetworkManagerCommand), [typeof(ListHostsNetworkCommand), typeof(NetworkConnsManagerCommand), typeof(NetworkCallbacks), typeof(EndPointInfoCommand)] },
-		{typeof(SeClavCommandLoader), [typeof(SeClavRunnerCommand), typeof(SeClavModuleManagerCommand)] }
-	};*/
-
-	//public readonly List<Type> AllCommandTypes, AllBaseCommandTypes, AllLoaders;
 	public readonly List<Type> AllBaseCommandTypes;
 	public readonly Dictionary<Type, List<string>> AllCallNames, CommandList;
 	public readonly Dictionary<Type, List<Type>> Loaders;
 
 	private readonly Dictionary<Type, (List<string> callnames, List<(string, Type)> subCmds, bool isBase)> PreProcessed;
 	private readonly HashSet<(Type, List<(string, Type)>)> LoaderSubCommands;
-	private readonly List<string> errors;
+	private readonly List<GlobalCommandTestException> errors;
 
 	public GlobalCommandList () {
-		AllBaseCommandTypes = new ();
+		AllBaseCommandTypes = [];
 		AllCallNames = new ();
 		CommandList = new ();
 		Loaders = new ();
 		PreProcessed = new ();
-		LoaderSubCommands = new ();
-		errors = new ();
-
-		//var asmList = AppDomain.CurrentDomain.GetAssemblies ()
-		//	.Where ( a => a.FullName != null
-		//	&& !a.FullName.StartsWith ( "System" )
-		//	&& !a.FullName.StartsWith ( "Microsoft" )
-		//	&& !a.FullName.StartsWith ( "netstandard" )
-		//	&& !a.FullName.StartsWith ( "xunit" )
-		//	).ToList ();
-		//List<Assembly> asmList = [
-		//	typeof(Components.Implementations.HookManagerCommand).Assembly,
-		//	typeof(Components.Interfaces.TargetManagerCommand).Assembly,
-		//	typeof(Components.Library.BasicCommands).Assembly,
-		//	typeof(InputResender.CLI.CoreCreatorCommand).Assembly,
-		//	typeof(InputResender.OSDependent.Windows.WindowsCommands).Assembly,
-		//	typeof(InputResender.WindowsGUI.LowLevelInputCommand).Assembly,
-		//];
-		//Dictionary<Assembly, List<Type>> filteredTypes = [];
-		//foreach ( var asm in asmList ) {
-		//	List<Type> types = [];
-		//	var allTypes = asm.GetTypes ();
-		//	foreach ( var type in allTypes ) {
-		//		if ( type.Namespace != null && type.Namespace.EndsWith ( "Tests" ) ) continue;
-		//		if ( type.IsSubclassOf ( typeof ( ACommand ) ) && !type.IsAbstract ) {
-		//			types.Add ( type );
-		//		}
-		//	}
-		//	filteredTypes[asm] = types;
-		//}
+		LoaderSubCommands = [];
+		errors = [];
 
 		foreach ( Type type in allCmdTypes ) {
 			if ( type.IsSubclassOf ( typeof ( ACommandLoader<CoreT> ) ) ) {
@@ -189,7 +127,7 @@ internal class GlobalCommandList<CoreT> where CoreT : CoreBase {
 				ProcessCommand ( type );
 			}
 		}
-		if ( errors.Count > 0 ) throw new AggregateException ( "Errors when processing commands/loaders:\n" + string.Join ( "\n", errors ) );
+		if ( errors.Count > 0 ) throw new CommandProcessingException ( errors.AsReadOnly () );
 
 		HashSet<Type> subs = new ();
 		foreach ( var kvp in PreProcessed ) {
@@ -207,21 +145,17 @@ internal class GlobalCommandList<CoreT> where CoreT : CoreBase {
 			PreProcessed[baseCmd] = (entry.callnames, entry.subCmds, true);
 		}
 
-		Dictionary<Type, Type> adHocSubs = []; // Type 'key' is ad-hoc added as sub-command to Type 'val'.
+		Dictionary<Type, Type> adHocSubs = [];
 		foreach ( (Type loader, List<(string, Type)> sub) in LoaderSubCommands ) {
 			if ( !Loaders.TryGetValue ( loader, out var subCmd ) )
-				throw new Exception ( $"Loader '{loader}' has sub commands, but was not processed correctly." );
-			//List<Type> subT = loader
+				throw new CommandDependencyException ( loader, $"Loader '{loader.Name}' has sub commands, but was not processed correctly." );
 			foreach ( (string subOwnerCN, Type subT) in sub ) {
 				var found = PreProcessed.FirstOrDefault ( kvp => kvp.Value.callnames.Contains ( subOwnerCN ) );
-				if ( found.Key == null ) throw new Exception ( $"Loader '{loader}' has sub command for '{subOwnerCN}', which does not match any command call names." );
+				if ( found.Key == null ) throw new CommandDependencyException ( loader, $"Loader '{loader.Name}' has sub command for '{subOwnerCN}', which does not match any command call names.", subCommandName: subOwnerCN );
 
 				adHocSubs.Add ( subT, found.Key );
-				AllBaseCommandTypes.Remove ( subT ); // Ad-hoc sub-commands are not base commands.
+				AllBaseCommandTypes.Remove ( subT );
 				var preloadedSubcmd = PreProcessed[subT];
-				//foreach ( string callname in preloadedSubcmd.callnames ) {
-				//	found.Value.subCmds.Add ( (callname, subT) );
-				//}
 				found.Value.subCmds.Add ( (preloadedSubcmd.callnames[0], subT) );
 			}
 		}
@@ -238,8 +172,6 @@ internal class GlobalCommandList<CoreT> where CoreT : CoreBase {
 
 	private void PushSubCommands ( Type baseType, string pre, Type type ) {
 		var preEntry = PreProcessed[type];
-		//CommandList[type] = [.. preEntry.callnames];
-		//AllCallNames[type] = [.. preEntry.callnames];
 		AllCallNames[type] = preEntry.callnames.Select ( cn => string.IsNullOrEmpty ( pre ) ? cn : $"{pre} {cn}" ).ToList ();
 		CommandList[type] = preEntry.callnames.Select ( cn => string.IsNullOrEmpty ( pre ) ? cn : $"{pre} {cn}" ).ToList ();
 
@@ -247,10 +179,10 @@ internal class GlobalCommandList<CoreT> where CoreT : CoreBase {
 			string fullCmd = preEntry.callnames[0];
 			if ( !string.IsNullOrEmpty ( pre ) ) fullCmd = $"{pre} {fullCmd}";
 			if ( nextType != null ) {
-				if ( !PreProcessed.ContainsKey ( nextType ) ) throw new Exception ( $"Command '{type}' has inter command '{subCmd}' pointing to '{nextType}', which is not processed." );
+				if ( !PreProcessed.ContainsKey ( nextType ) ) throw new CommandDependencyException ( type, $"Command '{type.Name}' has inter command '{subCmd}' pointing to '{nextType.Name}', which is not processed.", nextType, subCmd );
 				PushSubCommands ( baseType, fullCmd, nextType );
 			} else if ( CommandList[type].Contains ( $"{fullCmd} {subCmd}" ) )
-				throw new Exception ( $"Command '{type}' has inter command '{subCmd}', which would create duplicate command '{fullCmd} {subCmd}' in base command '{baseType}'." );
+				throw new CommandDefinitionException ( type, $"Command '{type.Name}' has inter command '{subCmd}', which would create duplicate command '{fullCmd} {subCmd}' in base command '{baseType.Name}'.", subCommand: subCmd );
 			else CommandList[type].Add ( $"{fullCmd} {subCmd}" );
 		}
 	}
@@ -265,24 +197,22 @@ internal class GlobalCommandList<CoreT> where CoreT : CoreBase {
 				var newCmdDict = GetMethodListSimple<KeyValuePair<Type, Func<CoreT, DCommand<CoreT>>>> ( loader, "NewCommandList", "Loader" );
 				newCmdList = newCmdDict.Select ( kvp => kvp.Key ).ToList ();
 			} catch ( Exception e2 ) {
-				throw new AggregateException ( $"Error when loading commands from loader '{loader}'", e1, e2 );
+				throw new CommandLoadingException ( loader, $"Error when loading commands from loader '{loader.Name}'", new AggregateException ( e1, e2 ) );
 			}
 		}
 
 		List<(string, Type)> subCommands = [];
 		try {
 			var newSubCmdList = GetField<KeyValuePair<Type, (string, Func<DCommand<CoreT>, DCommand<CoreT>>)>> ( loader, "NewSubCommandList", "Loader" );
-			//newCmdList.AddRange ( newSubCmdList.Select ( kvp => kvp.Key ) );
 			foreach ( var subCmd in newSubCmdList ) {
 				newCmdList.Add ( subCmd.Key );
 				subCommands.Add ( (subCmd.Value.Item1, subCmd.Key) );
 			}
-		} catch { } // Optional.
+		} catch { }
 
-		// Check if all the newCmdList items are in the list of tested commands.
 		foreach ( var cmdT in newCmdList ) {
 			if ( !allCmdTypes.Contains ( cmdT ) )
-				errors.Add ( $"Loader '{loader}' tries to load command '{cmdT}', which is not in the list of known command types." );
+				errors.Add ( new CommandLoadingException ( loader, cmdT, $"Loader '{loader.Name}' tries to load command '{cmdT.Name}', which is not in the list of known command types." ) );
 		}
 
 		if ( subCommands.Count > 0 )
@@ -316,18 +246,16 @@ internal class GlobalCommandList<CoreT> where CoreT : CoreBase {
 	}
 
 	private void ProcessCommand ( Type cmdType ) {
-		// Using reflection, get all call names and inter commands of this command type.
 		var callNames = GetField<string> ( cmdType, "CommandNames", "Command" );
 		var interCmds = GetField<(string, Type)> ( cmdType, "InterCommands", "Command" );
-		//AllCallNames[cmdType] = [.. callNames];
 
-		if ( callNames.Count == 0 ) throw new Exception ( $"Command '{cmdType}' has no call names." );
+		if ( callNames.Count == 0 ) throw new CommandDefinitionException ( cmdType, $"Command '{cmdType.Name}' has no call names." );
 
 		foreach ( (string cmd, Type nextCmd) in interCmds ) {
 			if ( nextCmd != null ) {
-				if ( !nextCmd.IsSubclassOf ( typeof ( DCommand<CoreT> ) ) ) throw new Exception ( $"Command '{cmdType}' has invalid inter command type '{nextCmd}'. It must be derived from 'ACommand'." );
+				if ( !nextCmd.IsSubclassOf ( typeof ( DCommand<CoreT> ) ) ) throw new CommandDefinitionException ( cmdType, $"Command '{cmdType.Name}' has invalid inter command type '{nextCmd.Name}'. It must be derived from 'DCommand'.", nextCmd );
 				if (! allCmdTypes.Contains(nextCmd))
-					errors.Add ( $"Command '{cmdType}' has inter command for '{cmd}', which points to '{nextCmd}', which is not in the list of known command types." );
+					errors.Add ( new CommandDefinitionException ( cmdType, $"Command '{cmdType.Name}' has inter command for '{cmd}', which points to '{nextCmd.Name}', which is not in the list of known command types.", nextCmd, cmd ) );
 			}
 		}
 
@@ -336,25 +264,25 @@ internal class GlobalCommandList<CoreT> where CoreT : CoreBase {
 
 	private IReadOnlyCollection<T> GetField<T> ( Type type, string fieldName, string objName ) {
 		var fieldInfo = type.GetField ( fieldName, BindingFlags.NonPublic | BindingFlags.Static );
-		if ( fieldInfo == null ) throw new Exception ( $"{objName} '{type}' does not have 'private static {fieldName}' field." );
+		if ( fieldInfo == null ) throw new CommandRegistrationException ( type, fieldName, $"{objName} '{type.Name}' does not have 'private static {fieldName}' field." );
 
-		if ( fieldInfo.GetValue ( null ) is not IReadOnlyCollection<T> field ) throw new Exception ( $"{objName} '{type}' has invalid '{fieldName}' field. It must be of type 'IReadOnlyCollection<{typeof ( T )}>'." );
+		if ( fieldInfo.GetValue ( null ) is not IReadOnlyCollection<T> field ) throw new CommandRegistrationException ( type, fieldName, $"{objName} '{type.Name}' has invalid '{fieldName}' field. It must be of type 'IReadOnlyCollection<{typeof ( T )}>'." );
 		return field;
 	}
 
 	private IReadOnlyCollection<T> GetMethodListSimple<T> ( Type type, string methodName, string objName ) {
 		var methodInfo = type.GetMethod ( methodName, BindingFlags.NonPublic | BindingFlags.Static );
-		if ( methodInfo == null ) throw new Exception ( $"{objName} '{type}' does not have 'private static {methodName}' method." );
+		if ( methodInfo == null ) throw new CommandRegistrationException ( type, methodName, $"{objName} '{type.Name}' does not have 'private static {methodName}' method." );
 
 		var expParams = methodInfo.GetParameters ();
 		if ( expParams.Length != 1 )
-			throw new Exception ( $"{objName} '{type}' has invalid '{methodName}' method. It must have single parameter." );
+			throw new CommandRegistrationException ( type, methodName, $"{objName} '{type.Name}' has invalid '{methodName}' method. It must have single parameter." );
 		if ( expParams[0].ParameterType != type )
-			throw new Exception ( $"{objName} '{type}' has invalid '{methodName}' method. Its single parameter must be of type '{type}' (self reference)." );
+			throw new CommandRegistrationException ( type, methodName, $"{objName} '{type.Name}' has invalid '{methodName}' method. Its single parameter must be of type '{type.Name}' (self reference)." );
 
 		var res = methodInfo.Invoke ( null, [null] );
 		if ( res is not IReadOnlyCollection<T> collection )
-			throw new Exception ( $"{objName} '{type}' has invalid '{methodName}' method. It must return 'IReadOnlyCollection<{typeof ( T )}>'." );
+			throw new CommandRegistrationException ( type, methodName, $"{objName} '{type.Name}' has invalid '{methodName}' method. It must return 'IReadOnlyCollection<{typeof ( T )}>'." );
 		return collection;
 	}
 }

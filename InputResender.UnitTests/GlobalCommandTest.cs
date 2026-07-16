@@ -273,20 +273,15 @@ public class GlobalCommandsAreTestedTest ( Outputter output ) : GlobalCommandTes
 	[Fact]
 	public void AllCommandsAreTested () {
 		// This test gathers all implementations of 'ACommand' automatically using reflection.
-		List<string> missing = new ();
+		List<Type> unregistered = new ();
 		foreach ( var cmdCls in CommandList.AllCallNames.Keys )
-			if ( !CommandList.CommandList.ContainsKey ( cmdCls ) ) missing.Add ( $" - {cmdCls}" );
-		if ( missing.Any () ) PrintProblematicTests ( "are not in the list of tested commands" );
+			if ( !CommandList.CommandList.ContainsKey ( cmdCls ) ) unregistered.Add ( cmdCls );
+		if ( unregistered.Any () ) throw new CommandNotTestedUnregisteredException ( unregistered, CommandList.CommandList.Keys.ToList () );
 
+		List<Type> withoutTests = new ();
 		foreach ( var cmdInfo in CommandList.CommandList )
-			if ( !cmdInfo.Value.Any () ) missing.Add ( $" - {cmdInfo.Key}" );
-		if ( missing.Any () ) PrintProblematicTests ( "do not have any tested command lines" );
-
-		void PrintProblematicTests ( string errMsg ) {
-			string missingInfo = string.Join ( '\n', missing );
-			string allTested = string.Join ( '\n', CommandList.CommandList.Keys.Select ( T => $" - {T}" ) );
-			Assert.Fail ( $"The following commands {errMsg}:\n{missingInfo}\nCurrently tested commands:\n{allTested}" );
-		}
+			if ( !cmdInfo.Value.Any () ) withoutTests.Add ( cmdInfo.Key );
+		if ( withoutTests.Any () ) throw new CommandWithoutTestsException ( withoutTests, CommandList.CommandList.Keys.ToList () );
 	}
 }
 
@@ -311,7 +306,7 @@ public class GlobalCommandsCanBeLoadedTest ( Outputter output ) : GlobalCommandT
 
 				}
 			}
-			if ( !changed ) Assert.Fail ( "Following commands can never be loaded:\n" + string.Join ( '\n', waiting.Select ( T => $" - {T}" ) ) );
+			if ( !changed ) throw new CommandLoadingException ( waiting );
 		}
 	}
 
