@@ -16,7 +16,7 @@ public class Config : ComponentBase<DMainAppCore> {
 	private bool SkipAutoSave = false;
 	private string homePath, savePath;
 	private readonly Dictionary<string, string[]> autoCommands = new () {
-		{"initCmds", new string[] { "loadall", "clear", "safemode on", "core new", "core own", "conns force init", "loglevel all", "network callback recv print", "network callback newconn print", "hook manager start" } }
+		{"initCmds", ["loadall", "clear", "safemode on"] },
 	};
 	private string autostartName = "initCmds";
 	private bool printAutoCommands = true;
@@ -25,22 +25,29 @@ public class Config : ComponentBase<DMainAppCore> {
 	private PasswordHolder configPassword = null;
 	private readonly Dictionary<string, string> EnvVars = [];
 
-	public Config ( string initPath, PasswordHolder password, DMainAppCore owner ) : base ( owner ) {
+	public Config ( string initPath, PasswordHolder password, DMainAppCore owner, string basePath = null ) : base ( owner ) {
 		var searchOptions = FileAccessService.SearchOptions.ProjectFolder
 			| FileAccessService.SearchOptions.SolutionFolder
 			| FileAccessService.SearchOptions.SubDirectories;
 		if ( string.IsNullOrWhiteSpace ( initPath ) ) initPath = AppDomain.CurrentDomain.BaseDirectory;
 		if ( initPath == DEFAULT_INIT_PATH ) {
-			savePath = initPath;
+			savePath = basePath ?? AppDomain.CurrentDomain.BaseDirectory;
 			homePath = Path.GetDirectoryName ( savePath );
 			configPassword = password;
+			Load ();
 		} else if ( initPath == VIRTUAL_INIT_PATH ) {
-			savePath = AppDomain.CurrentDomain.BaseDirectory;
+			SkipAutoSave = true;
+			savePath = basePath ?? AppDomain.CurrentDomain.BaseDirectory;
 			homePath = Path.GetDirectoryName ( savePath );
 			configPassword = password ?? new ("ConfigPassword");
-			SkipAutoSave = true;
+			SetHomepathVar ( owner, savePath );
 		} else {
-			savePath = FileManager.FileService.GetAssetPath ( initPath, ConfigFileName, searchOptions );
+			string fileName = ConfigFileName;
+			if (basePath != null && Path.HasExtension ( initPath ) && !initPath.Contains ( Path.DirectorySeparatorChar ) ) {
+				fileName = initPath;
+				initPath = basePath;
+			}
+			savePath = FileManager.FileService.GetAssetPath ( initPath, fileName, searchOptions );
 			homePath = Path.GetDirectoryName ( savePath );
 			configPassword = password;
 			Load ();
@@ -81,11 +88,17 @@ public class Config : ComponentBase<DMainAppCore> {
 				throw new ArgumentException ( "HomePath must be an existing directory or a valid file path." );
 			homePath = value;
 			savePath = Path.Combine ( HomePath, "config.xml" );
-			Owner.Fetch<CommandProcessor<DMainAppCore>> ()
-				.SetVar ( Components.Interfaces.Commands.FileManagerCommand.HOME_PATH_VAR_NAME, homePath );
+			SetHomepathVar (Owner, homePath);
 			Save ();
 		}
 	}
+
+	private static void SetHomepathVar (DMainAppCore Owner, string home) {
+		if ( !Directory.Exists ( home ) ) throw new ArgumentException ( $"Home path '{home}' does not exist." );
+		Owner.Fetch<CommandProcessor<DMainAppCore>> ()
+			.SetVar ( Components.Interfaces.Commands.FileManagerCommand.HOME_PATH_VAR_NAME, home );
+	}
+
 	public string SavePath {
 		get => savePath; set {
 			if ( string.IsNullOrEmpty ( value ) )

@@ -6,7 +6,7 @@ using Xunit;
 using FluentAssertions;
 using System.Collections.Generic;
 
-namespace Components.ImplementationTests;
+namespace Components.ImplementationTests.Commands;
 public class TestableHookManagerCommand : HookManagerCommand {
 	public TestableHookManagerCommand ( DMainAppCore owner ) : base ( owner ) { }
 

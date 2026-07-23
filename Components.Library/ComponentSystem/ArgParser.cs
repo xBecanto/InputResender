@@ -27,6 +27,7 @@ public class ArgParser {
 			Name = string.Empty;
 			Value = string.Empty;
 			ValSpecified = false;
+			int startPos = pos;
 
 			bool readingName = true;
 			bool isEscaped = false;
@@ -86,7 +87,7 @@ public class ArgParser {
 						ValSpecified = true;
 						arg = string.Empty;
 					} else {
-						throw new ArgumentException ( $"Unexpected '=' at {pos}" );
+						throw new ArgumentException ( $"Unexpected '=' at #{pos} of arg '{line[startPos..]}'" );
 					}
 				}
 			}
@@ -379,14 +380,20 @@ public class ArgParser {
 		return defVal;
 	}
 
-	public void Remove (int id, bool shouldThrow = true) {
+
+	private Arg RemoveArg ( int id, bool shouldThrow = true ) {
 		if (id < 0 || id >= ArgC) {
 			if (shouldThrow) throw new ArgumentOutOfRangeException(nameof(id), $"Argument index {id} is out of range.");
-			return;
+			return null;
 		}
+
+		Arg ret = Args[id];
 		Args.RemoveAt(id);
 		for (int i = id; i < ArgC; i++) Args[i].Position--;
+		return ret;
 	}
+
+	public void Remove ( int id, bool shouldThrow = true ) => RemoveArg ( id, shouldThrow );
 	public void Remove (string id, bool shouldThrow = true) {
 		var arg = this[id];
 		if (arg?.value == null) {
@@ -394,5 +401,33 @@ public class ArgParser {
 			return;
 		}
 		Remove(arg.value.Position, shouldThrow);
+	}
+
+	public void ConvertToSwitch ( int id, char sw, string name, bool shouldThrow = true ) {
+		Arg arg = RemoveArg ( id, shouldThrow );
+		SwitchesChar.Add ( sw, arg );
+		SwitchesName.Add ( name, arg );
+	}
+	public void ConvertToSwitch ( string id, char sw, string name, bool shouldThrow = true ) {
+		var arg = this[id];
+		if (arg?.value == null) {
+			if (shouldThrow) throw new ArgumentException($"Argument '{id}' not found.", nameof(id));
+			return;
+		}
+		ConvertToSwitch(arg.value.Position, sw, name, shouldThrow);
+	}
+
+	public void RegisterOrConvertToSwitch ( char sw, string name, bool shouldThrow = true ) {
+		RegisterSwitch ( sw, name );
+		var arg = this[name];
+		if (arg?.value == null) {
+			if ( shouldThrow && !SwitchesName.ContainsKey ( name ) )
+				throw new ArgumentException ( $"Argument '{name}' not found.", nameof(name) );
+			return;
+		}
+		arg.value = RemoveArg ( arg.value.Position, shouldThrow );
+		if ( SwitchesName.TryAdd(name, arg.value)) {
+			SwitchesChar.Add ( sw, arg.value );
+		}
 	}
 }

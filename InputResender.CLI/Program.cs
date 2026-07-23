@@ -8,9 +8,26 @@ namespace InputResender.CLI;
 public static class Program {
 	public static bool StartMain ( string[] args, ACommandLoader<DMainAppCore> TLLoader, CliWrapper cliWrapper ) {
 		ArgParser parser = new ( string.Join ( " ", args ), cliWrapper.Console.WriteLine );
+		parser.RegisterSwitch ( 'd', "debug" );
 		parser.RegisterSwitch ( 'i', "inline" );
 		parser.RegisterSwitch ( 'v', "virtual" );
-		//if ( !Config.Load ( parser.String ( "cfg", null ) ) )
+		parser.RegisterOrConvertToSwitch ( 'c', "cfg", false );
+		parser.RegisterOrConvertToSwitch ( 'p', "pass", false );
+		parser.RegisterOrConvertToSwitch ( 'b', "base", false );
+
+		if ( parser.Present ( "--debug" ) ) {
+			cliWrapper.Console.WriteLine ( "Debug mode enabled." );
+			cliWrapper.Console.WriteLine ( $"Inline mode: {parser.Present ( "--inline" )}" );
+			cliWrapper.Console.WriteLine ( $"Virtual config: {parser.Present ( "--virtual" )}" );
+			cliWrapper.Console.WriteLine ( $"Config path: {parser.String ( "--cfg", "Config path", -1 )}" );
+			cliWrapper.Console.WriteLine ( $"Password: {parser.String ( "--pass", "Config password", -1 )}" );
+			cliWrapper.Console.WriteLine ( $"Base path: {parser.String ( "--base", "Base path for config", -1 )}" );
+			cliWrapper.Console.WriteLine ( $"Other arguments ({parser.ArgC}):" );
+			for ( int i = 0; i < parser.ArgC; i++ ) {
+				cliWrapper.Console.WriteLine ( $"  {i}: >|{parser.String ( i, null )}|<" );
+			}
+		}
+
 		//	Config.Save (); // Couldn't load configuration, save the current one
 		DMainAppCore core = cliWrapper.CmdProc.Owner;
 
@@ -39,14 +56,14 @@ public static class Program {
 			}
 		}
 
-		if ( parser.HasValue ( "cfg", true ) ) {
-			LoadConfig ( parser.String ( "cfg", "Config path", -1 ) );
-			parser.Remove ( "cfg" );
-		}
+		if ( parser.HasValue ( "--cfg", true ) )
+			LoadConfig ( parser.String ( "--cfg", "Config path", -1 ) );
 
 		if ( cfg == null )
 			LoadConfig ( parser.Present ( "--virtual" ) ? Config.VIRTUAL_INIT_PATH : Config.DEFAULT_INIT_PATH );
 
+		if (cfg == null)
+			throw new InvalidOperationException ( "Failed to load configuration!" );
 
 		cliWrapper.CmdProc.AddCommand ( new BasicCommands<DMainAppCore> ( core, cliWrapper.Console.WriteLine, cliWrapper.Console.Clear, () => { /* Cleanup is done after main loop */ } ) );
 		cliWrapper.CmdProc.AddCommand ( new FactoryCommandsLoader ( core ) );
@@ -60,6 +77,8 @@ public static class Program {
 				if ( cfg.PrintAutoCommands ) cliWrapper.ProcessLine ( cmd, true );
 				else cliWrapper.CmdProc.ProcessLine ( cmd );
 			}
+		} else {
+			cfg.MaxOnelinerLength = -1;
 		}
 
 		for (int i = 0; i < parser.ArgC; i++) {
@@ -79,10 +98,13 @@ public static class Program {
 			if ( cfg != null ) throw new NotImplementedException ( "Reloading configs is not implemented yet!" );
 
 			string password = null;
-			if (parser.HasValue ( "pass", true )) {
-				password = parser.String ( "pass", "Config password", -1 );
-				parser.Remove ( "pass" );
-			}
+			if (parser.HasValue ( "--pass", true ))
+				password = parser.String ( "--pass", "Config password", -1 );
+
+			string basePath = null;
+			if ( parser.HasValue ( "--base", true ) )
+				basePath = parser.String ( "--base", "Base path for config", -1 );
+
 			if ( string.IsNullOrWhiteSpace ( password ) ) {
 				if ( inline || path == Config.VIRTUAL_INIT_PATH ) password = "ConfigDefPass";
 				else {
@@ -94,7 +116,7 @@ public static class Program {
 			}
 
 			PasswordHolder psswd = new (password);
-			cfg = new ( path, psswd, core );
+			cfg = new ( path, psswd, core, basePath );
 		}
 	}
 

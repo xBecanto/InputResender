@@ -21,6 +21,8 @@ public class FileAccessService {
 		ProjectFolder = 4,
 		/// <summary>Try to navigate to solution folder if starts under bin/Debug or bin/Release folders. If SubDirectories is also set, will search all subdirectories of the solution folder.</summary>
 		SolutionFolder = 8,
+		AllowMissingFile = 16,
+		AllowMissingDirectory = 32,
 		All = 0xFFFF,
 	}
 
@@ -28,56 +30,101 @@ public class FileAccessService {
 	public virtual string GetAssetPath ( string basePath, string filename, SearchOptions searchOptions ) {
 		ArgumentException.ThrowIfNullOrWhiteSpace ( basePath );
 		ArgumentException.ThrowIfNullOrWhiteSpace ( filename );
-		if ( basePath.EndsWith ( filename ) )
-			basePath = Path.GetDirectoryName ( basePath );
-		if ( Exists ( Path.Combine ( basePath, filename ) ) )
-			return Path.Combine ( basePath, filename );
 
-		if (searchOptions.HasFlag ( SearchOptions.SubDirectories )) {
-			var subdirs = GetDirectories ( new DirectoryInfo ( basePath ) );
-			foreach ( var subdir in subdirs ) {
-				string potentialPath = Path.Combine ( subdir.FullName, filename );
-				if ( Exists ( potentialPath ) )
-					return potentialPath;
+		bool allowMissingFile = searchOptions.HasFlag ( SearchOptions.AllowMissingFile );
+		bool allowMissingDir = searchOptions.HasFlag ( SearchOptions.AllowMissingDirectory );
+		List<string> candidates = [];
+
+		bool Check ( string path ) {
+			if ( allowMissingDir ) { candidates.Add ( path ); return false; }
+			if ( Exists ( path ) ) return true;
+			if ( allowMissingFile ) {
+				string dir = Path.GetDirectoryName ( path );
+				return !string.IsNullOrEmpty ( dir ) && Directory.Exists ( dir );
+			}
+			return false;
+		}
+
+		if ( IsAbsolutePath ( filename ) ) {
+			if ( allowMissingDir ) return filename;
+			if ( Exists ( filename ) ) return filename;
+			if ( allowMissingFile ) {
+				string dir = Path.GetDirectoryName ( filename );
+				if ( !string.IsNullOrEmpty ( dir ) && Directory.Exists ( dir ) ) return filename;
+			}
+			throw new FileNotFoundException ( $"Could not find file: {filename}" );
+		}
+
+		if ( File.Exists ( filename ) ) return filename;
+		if ( File.Exists ( basePath ) ) return basePath;
+		if ( Path.HasExtension ( basePath ) )
+			basePath = Path.GetDirectoryName ( basePath );
+
+		string combined = Path.Combine ( basePath, filename );
+		if ( Check ( combined ) ) return combined;
+
+		if ( searchOptions.HasFlag ( SearchOptions.SubDirectories ) ) {
+			if ( !allowMissingDir || Directory.Exists ( basePath ) ) {
+				foreach ( var subdir in GetDirectories ( new DirectoryInfo ( basePath ) ) ) {
+					string potentialPath = Path.Combine ( subdir.FullName, filename );
+					if ( Check ( potentialPath ) ) return potentialPath;
+				}
 			}
 		}
 
-		if ( searchOptions.HasFlag ( SearchOptions.ProjectFolder )
-			|| searchOptions.HasFlag ( SearchOptions.SolutionFolder ) ) {
-			DirectoryInfo exePathDir = new (basePath);
-			var potentialDebug = GetParent ( exePathDir );
-			if ( potentialDebug?.Name != "Debug" && potentialDebug?.Name != "Release" )
-				throw new DirectoryNotFoundException ( $"Could not find path: {basePath}." );
+		bool CheckPotentialPath ( DirectoryInfo path, out DirectoryInfo potentialDir, params string[] searchNames ) {
+			potentialDir = null;
+			ArgumentNullException.ThrowIfNull ( path );
+			if ( allowMissingDir ) {
+				try { potentialDir = GetParent ( path ); }
+				catch ( DirectoryNotFoundException ) { return true; }
+			} else
+				potentialDir = GetParent ( path );
 
-			var potentialBin = GetParent ( potentialDebug );
-			if ( potentialBin?.Name != "bin" )
-				throw new DirectoryNotFoundException ( $"Could not find path: {basePath}." );
+			if ( searchNames == null ) return true;
+			if ( potentialDir != null && searchNames.Contains ( potentialDir.Name ) ) return false;
+			if ( allowMissingDir ) return true;
 
-			var potentialMainProj = GetParent ( potentialBin );
-			if ( searchOptions.HasFlag ( SearchOptions.ProjectFolder ) ) {
+			throw new DirectoryNotFoundException ( $"Could not find path: {basePath}." );
+		}
+
+		if ( searchOptions.HasFlag ( SearchOptions.ProjectFolder ) || searchOptions.HasFlag ( SearchOptions.SolutionFolder ) ) {
+			DirectoryInfo exePathDir = new ( basePath );
+
+			if ( CheckPotentialPath ( exePathDir, out var potentialDebug, "Debug", "Release" )
+				|| CheckPotentialPath ( potentialDebug, out var potentialBin, "bin" )
+				|| CheckPotentialPath ( potentialBin, out var potentialMainProj, null ) )
+				return Return ();
+
+			if (searchOptions.HasFlag ( SearchOptions.ProjectFolder ) ) {
 				string potentialPath = Path.Combine ( potentialMainProj.FullName, filename );
-				if ( Exists ( potentialPath ) )
-					return potentialPath;
-				else if ( !searchOptions.HasFlag ( SearchOptions.SolutionFolder ) )
-					throw new DirectoryNotFoundException ( $"Could not find path: {basePath}." );
+				if ( Check ( potentialPath ) ) return potentialPath;
 			}
 
-			if ( searchOptions.HasFlag ( SearchOptions.ProjectFolder ) ) {
-				var potentialSolution = GetParent ( potentialMainProj );
+			if (searchOptions.HasFlag ( SearchOptions.SolutionFolder ) ) {
+				if ( CheckPotentialPath ( potentialMainProj, out var potentialSolution, null ) ) return Return ();
 
 				var projs = GetDirectories ( potentialSolution ).ToList ();
 				projs.Insert ( 1, potentialMainProj );
 				projs.Insert ( 0, potentialSolution );
 				foreach ( var proj in projs ) {
 					string potentialPath = Path.Combine ( proj.FullName, filename );
-					if ( Exists ( potentialPath ) ) return potentialPath;
+					if ( Check ( potentialPath ) ) return potentialPath;
 				}
 			}
 		}
 
-		throw new DirectoryNotFoundException ( $"Could not find home path containing {filename} starting from {basePath} and searching parent directories." );
+		return Return ();
+		string Return () {
+			if ( allowMissingDir ) return string.Join ( '\n', candidates );
+			throw new DirectoryNotFoundException ( $"Could not find home path containing {filename} starting from {basePath} and searching parent directories." );
+		}
 	}
-	private static DirectoryInfo GetParent (DirectoryInfo dir) {
+	public string[] GetAssetPaths ( string basePath, string filename, SearchOptions searchOptions ) =>
+		GetAssetPath ( basePath, filename, searchOptions | SearchOptions.AllowMissingDirectory ).Split ( '\n' );
+	private static bool IsAbsolutePath ( string path ) =>
+		Path.IsPathRooted ( path ) || path.StartsWith ( '~' ) || path.Contains ( "://" );
+	private static DirectoryInfo GetParent ( DirectoryInfo dir ) {
 		if ( dir.Parent == null )
 			throw new DirectoryNotFoundException ( $"Could not find asset path: {dir.FullName}" );
 		return dir.Parent;

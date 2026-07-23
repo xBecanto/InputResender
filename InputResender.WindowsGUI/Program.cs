@@ -1,5 +1,6 @@
 //#define VirtConsole
 using System;
+using System.Collections.Generic;
 using System.Windows.Forms;
 using Components.Implementations;
 using Components.Interfaces;
@@ -10,6 +11,14 @@ namespace InputResender.WindowsGUI;
 internal static class Program {
 	[STAThread]
 	static void Main ( string[] args ) {
+		List<string> Args = [];
+		foreach ( var arg in args) {
+			if ( Args.Count > 0 && Args[^1].EndsWith ( '+' ) && arg.StartsWith ( '+' ) )
+				Args[^1] = Args[^1].TrimEnd ( '+' ) + Environment.NewLine + arg.TrimStart ( '+' );
+			else Args.Add ( arg );
+		}
+
+		args = Args.ToArray ();
 #if VirtConsole
 		ApplicationConfiguration.Initialize ();
 		Application.Run ( new ConsoleWindow () );
