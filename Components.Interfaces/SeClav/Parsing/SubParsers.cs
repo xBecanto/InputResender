@@ -79,8 +79,8 @@ internal class ParsingContext {
 				if ( line[0] == ' ' ) break;
 				int linePos = line[0] switch {
 					// Numerical
-					'0' => throw new InvalidOperationException ( $"Testing for '0' flag is not allowed!" ),
-								  '1' => 1, '2' => 2, '3' => 3,
+					'0' => throw new SCLSyntaxException ( $"Testing for '0' flag is not allowed!", line ),
+															  '1' => 1, '2' => 2, '3' => 3,
 					'4' => 4, '5' => 5, '6' => 6, '7' => 7,
 					'8' => 8, '9' => 9, 'A' => 10, 'B' => 11,
 					'C' => 12, 'D' => 13, 'E' => 14, 'F' => 15,
@@ -91,7 +91,7 @@ internal class ParsingContext {
 					'=' => 3, // EQUAL
 					'>' => 4, // LARGER
 					'<' => 5, // SMALLER
-					_ => throw new InvalidOperationException ( $"Invalid flag character '{line[0]}' in command flags." )
+					_ => throw new SCLSyntaxException ( $"Invalid flag character '{line[0]}' in command flags.", line )
 				};
 				flagReq |= linePos << (i * 5); // 4bit + sign bit per flag
 				line = line[1..];
@@ -140,13 +140,13 @@ internal class ParsingContext {
 
 				if ( pos >= args.Count ) {
 					if ( canRepeat ) continue;
-					throw new InvalidOperationException ( $"Macro '{macro.CmdCode}' expects at least {guider.after + 1} arguments, but only {args.Count} were provided." );
+					throw new SCLMacroException ( $"Macro '{macro.CmdCode}' expects at least {guider.after + 1} arguments, but only {args.Count} were provided.", line );
 				}
 				int sepPos = (args[pos]?.IndexOf ( guider.split )).GetValueOrDefault ( -1 );
 				bool nextStarts = sepPos < 0 && (args.Count > pos + 1) && args[pos + 1].StartsWith ( guider.split );
 				if ( sepPos < 0 && !nextStarts ) {
 					if ( canRepeat ) continue;
-					else throw new InvalidOperationException ( $"Macro '{macro.CmdCode}' expects argument {pos + 1} to start with '{guider.split}', but got '{args[pos]}'." );
+					else throw new SCLMacroException ( $"Macro '{macro.CmdCode}' expects argument {pos + 1} to start with '{guider.split}', but got '{args[pos]}'.", line );
 				}
 
 				string part = string.Join ( ' ', args[lastPos..pos] );
@@ -165,7 +165,7 @@ internal class ParsingContext {
 				for ( int j = 0; j < macro.guiders.Count; j++ ) {
 					if ( guider.split.Contains ( macro.guiders[j].split ) ) continue;
 					if ( part.Contains ( macro.guiders[j].split ) )
-						throw new InvalidOperationException ( $"Macro '{macro.CmdCode}' guider split '{macro.guiders[j].split}' found inside argument for guider split '{guider.split}'." );
+						throw new SCLMacroException ( $"Macro '{macro.CmdCode}' guider split '{macro.guiders[j].split}' found inside argument for guider split '{guider.split}'.", line );
 				}
 
 				parts.Add ( (i, part) );
@@ -209,23 +209,23 @@ internal class ParsingContext {
 			var interType = subCommand.Command.ReturnType;
 			interType = context.Status.GetDataType ( interType.Name );
 			if ( !interType.Equals ( expectedType ) )
-				throw new InvalidOperationException ( $"{errBase} of type '{expectedType.Name}', but the command '{subCommand.Command.CmdCode}' ({subCommand.Command.CommonName}) returns type '{interType.Name}'." );
+				throw new SCLCommandArgumentException ( $"{errBase} of type '{expectedType.Name}', but the command '{subCommand.Command.CmdCode}' ({subCommand.Command.CommonName}) returns type '{interType.Name}'.", line );
 			return new CmdArgInfo ( subCommand );
 		}
 
 		string token = context.GetIdentifier ( ref line );
 		if ( string.IsNullOrEmpty ( token ) )
-			throw new InvalidOperationException ( $"{errBase} of type '{expectedType.Name}', but none was provided." );
+			throw new SCLCommandArgumentException ( $"{errBase} of type '{expectedType.Name}', but none was provided.", line );
 
 		// Variable argument
 		if ( context.Status.TryGetVarID ( token, out TArg varID ) ) {
 			var varType = context.Status.GetTypeOfVar ( varID );
 			if ( expectedType != varType )
-				throw new InvalidOperationException ( $"{errBase} of type '{expectedType.Name}', but variable '{token}' is of type '{varType.Name}'." );
+				throw new SCLCommandArgumentException ( $"{errBase} of type '{expectedType.Name}', but variable '{token}' is of type '{varType.Name}'.", line );
 			return new CmdArgInfo ( varID );
 		}
 
-		throw new InvalidOperationException ( $"{errBase} of type '{expectedType.Name}', but got '{token}'." );
+		throw new SCLCommandArgumentException ( $"{errBase} of type '{expectedType.Name}', but got '{token}'.", line );
 	}
 }
 
@@ -242,7 +242,7 @@ internal abstract class SubParserBase {
 	public abstract void Apply ();
 	public void MustEndLine () {
 		if ( !string.IsNullOrWhiteSpace ( RemainLine ) )
-			throw new InvalidOperationException ( $"Unexpected trailing characters '{RemainLine}' after processing line '{OriginalLine}'." );
+			throw new SCLSyntaxException ( $"Unexpected trailing characters '{RemainLine}' after processing line '{OriginalLine}'.", OriginalLine );
 	}
 }
 
@@ -270,7 +270,7 @@ internal class SubStateParser : SubParserBase {
 		string[] awaitingTokens = AwaitingTransition ( ref line );
 		string stateName = NextToken ( ref line, "-" );
 		if ( string.IsNullOrEmpty ( stateName ) )
-			throw new InvalidOperationException ( $"Invalid state transition format in line '{originalLine}'. Missing state name." );
+			throw new SCLStateTransitionException ( $"Invalid state transition format in line '{originalLine}'. Missing state name.", originalLine );
 		bool isAccepting = IsEnclosed ( ref stateName, "[", "]" );
 		result = new ( context, isAccepting, originalLine, stateName, awaitingTokens );
 
@@ -278,7 +278,7 @@ internal class SubStateParser : SubParserBase {
 			line = line.TrimStart ();
 			if ( line.Length == 0 ) break;
 			if ( !line.StartsWith ( '-' ) )
-				throw new InvalidOperationException ( $"Invalid state transition format in line '{originalLine}'. Expected '-' at the start of transition definition." );
+				throw new SCLStateTransitionException ( $"Invalid state transition format in line '{originalLine}'. Expected '-' at the start of transition definition.", originalLine );
 			line = line[1..];
 			(string token, bool canParallel) = OutTransition ( ref line );
 			string nextState = NextToken ( ref line, "-" );
@@ -287,10 +287,10 @@ internal class SubStateParser : SubParserBase {
 				else {
 					AssertTokenName ( token, 32 );
 					if ( result.Transitions.ContainsKey ( token ) )
-						throw new InvalidOperationException ( $"Duplicate transition token '{token}' in line '{originalLine}'." );
+						throw new SCLStateTransitionException ( $"Duplicate transition token '{token}' in line '{originalLine}'.", originalLine );
 					result.Transitions[token] = (nextState, canParallel);
 				}
-			} else throw new InvalidOperationException ( $"Invalid state transition format in line '{originalLine}'. Missing next state after token '{token}'." );
+			} else throw new SCLStateTransitionException ( $"Invalid state transition format in line '{originalLine}'. Missing next state after token '{token}'.", originalLine );
 
 			if ( line.Length == 0 ) break;
 		}
@@ -344,14 +344,14 @@ internal class SubStateParser : SubParserBase {
 			line = line[(3 + awaitingGroup.Length)..].TrimStart ();
 			return [awaitingGroup];
 		}
-		throw new InvalidOperationException ( $"Invalid state transition format in line '{line}'. Either '-->' or '-(state1, state2, ...)->' or '-state->' is expected at the start of the line." );
+		throw new SCLStateTransitionException ( $"Invalid state transition format in line '{line}'. Either '-->' or '-(state1, state2, ...)->' or '-state->' is expected at the start of the line.", line );
 	}
 
 	private static (string token, bool canParallel) OutTransition ( ref string line ) {
 		line.Trim ();
 		(string token, int usedSep) = NextToken ( ref line, ["-|>>", "->"] );
 		if ( usedSep < 0 )
-			throw new InvalidOperationException ( $"Invalid state transition format in line '{line}'. Missing transition arrow '->' or '-|>>'." );
+			throw new SCLStateTransitionException ( $"Invalid state transition format in line '{line}'. Missing transition arrow '->' or '-|>>'.", line );
 		int startOffset = usedSep == 0 ? 4 : 2; // Length of the separator
 		line = line[startOffset..].TrimStart ();
 		bool canParallel = usedSep == 0;
@@ -360,9 +360,9 @@ internal class SubStateParser : SubParserBase {
 
 	private static void AssertTokenName (string token, int maxSize) {
 		if (string.IsNullOrEmpty ( token ) || token.Length > maxSize )
-			throw new InvalidOperationException ( $"Invalid token name '{token}'. Token name must be 1 to {maxSize} characters long." );
+			throw new SCLStateTransitionException ( $"Invalid token name '{token}'. Token name must be 1 to {maxSize} characters long.", token );
 		if ( !token.All ( c => char.IsLetterOrDigit ( c ) || c == '_' ) || token.StartsWith ( '_' ) || token.EndsWith ( '_' ) )
-			throw new InvalidOperationException ( $"Invalid token name '{token}'. Token name must consist of letters, digits or underscores, and cannot start or end with an underscore." );
+			throw new SCLStateTransitionException ( $"Invalid token name '{token}'. Token name must consist of letters, digits or underscores, and cannot start or end with an underscore.", token );
 	}
 
 	private static bool IsEnclosed ( ref string token, string prefix, string suffix ) {
@@ -406,7 +406,7 @@ internal class SubMacroParser : SubParserBase {
 		var parts = context.ProcessMacro ( macro, line );
 		result.RewrittenLines = macro.RewriteByGuiders ( flags, parts );
 		if ( result.RewrittenLines == null ) // Macro rejected the input
-			throw new InvalidOperationException ( $"Macro '{macro.CmdCode}' could not process the input line ({originalLine})." );
+			throw new SCLMacroException ( $"Macro '{macro.CmdCode}' could not process the input line ({originalLine}).", originalLine );
 		result.RemainLine = string.Empty; // All is expected to be consumed by the macro
 		return true;
 	}
@@ -430,8 +430,10 @@ internal class SubUsingParser : SubParserBase {
 		result = null;
 		string originalLine = line;
 		if ( !line.StartsWith ( "@using ", out string moduleName ) ) return false;
+		if ( context.Status.IsModuleRegistered ( moduleName ) )
+			throw new SCLDuplicateUsingException ( moduleName, originalLine );
 		var module = context.ModuleLoader ( moduleName );
-		if ( module == null ) throw new InvalidOperationException ( $"Module '{moduleName}' not found." );
+		if ( module == null ) throw new SCLDirectiveException ( $"Module '{moduleName}' not found.", originalLine );
 		if ( context.EnableLogging ) context.LogAdd ( $"Module '{moduleName}' loaded: {module.Description}, {module.Commands.Count} commands, {module.DataTypes.Count} data types." );
 		result = new ( context, originalLine, moduleName, module );
 		result.RemainLine = string.Empty;
@@ -527,7 +529,7 @@ internal class SubAssignmentParser : SubParserBase {
 		if (!Dst.HasValue) {
 			if ( Context.Status.TryGetVarID ( DstName, out TArg varID ) )
 				Dst = SCLInterpreter.CrDst ( varID );
-			else throw new InvalidOperationException ( $"Variable '{DstName}' not found for assignment." );
+			else throw new SCLCommandArgumentException ( $"Variable '{DstName}' not found for assignment.", OriginalLine );
 		}
 		TArg dstArg = new ( Dst.Value.Generic );
 		TArg srcArg;
@@ -541,7 +543,7 @@ internal class SubAssignmentParser : SubParserBase {
 				? Src.InterCommand.Destination.Value.ValueId
 				: Src.InterCommand.TryRegisterResult ().ValueId );
 			Src.InterCommand.Apply ();
-		} else throw new InvalidOperationException ( $"Source for assignment to '{Name}' is not properly set." );
+		} else throw new SCLCommandArgumentException ( $"Source for assignment to '{Name}' is not properly set.", OriginalLine );
 
 		Context.Status.PushCommand ( new ( Context.AssignOpCode, Dst.Value, RequiredFlags, dstArg, srcArg ) );
 	}
@@ -631,7 +633,7 @@ internal class SubCommandParser : SubParserBase {
 		result = new ( context, originalLine, token, cmd, flagReq );
 
 		if (cmd.Args.Count != cmd.ArgC)
-			throw new InvalidOperationException ( $"Internal error: Command '{cmd.CmdCode}' argument count mismatch between ICommand definition and Args list." );
+			throw new SCLParsingException ( $"Internal error: Command '{cmd.CmdCode}' argument count mismatch between ICommand definition and Args list.", originalLine );
 		for ( int i = 0; i < cmd.ArgC; i++ ) {
 			if ( cmd.Args[i].type is SCLT_Any ) {
 				result.args[i] = new CmdArgInfo ( SCLInterpreter.CrArgVar ( 1 ) ); // 'ANY' is requested. Corrently no better way to provide some 'placeholder' value.
@@ -648,13 +650,13 @@ internal class SubCommandParser : SubParserBase {
 	}
 
 	public TDst TryRegisterResult () {
-		if (Command.ReturnType == null) throw new InvalidOperationException ( $"Command '{Name}' does not have a return type." );
-		if ( Destination != null ) throw new InvalidOperationException ( $"Command '{Name}' result destination already registered." );
+		if (Command.ReturnType == null) throw new SCLCommandArgumentException ( $"Command '{Name}' does not have a return type.", OriginalLine );
+		if ( Destination != null ) throw new SCLCommandArgumentException ( $"Command '{Name}' result destination already registered.", OriginalLine );
 		return (Destination = Context.Status.RegisterResult ( Command.ReturnType )).Value;
 	}
 
 	public void SetDestination ( TDst dst ) {
-		if ( Destination != null ) throw new InvalidOperationException ( $"Command '{Name}' destination already set." );
+		if ( Destination != null ) throw new SCLCommandArgumentException ( $"Command '{Name}' destination already set.", OriginalLine );
 		Destination = dst;
 	}
 
@@ -672,11 +674,11 @@ internal class SubCommandParser : SubParserBase {
 				fArg[i] = SCLInterpreter.CrArgRes ( args[i].InterCommand.TryRegisterResult ().ValueId );
 				AssertArg ( "inter-command result" );
 				args[i].InterCommand.Apply ();
-			} else throw new InvalidOperationException ( $"Argument {i + 1} for command '{Name}' is not properly set." );
+			} else throw new SCLCommandArgumentException ( $"Argument {i + 1} for command '{Name}' is not properly set.", OriginalLine );
 
 			void AssertArg ( string argType ) {
 				if ( Context.Status.GetTypeOfVar ( fArg[i] ) == null )
-					throw new InvalidOperationException ( $"Internal error: Argument {i + 1} for command '{Command.CmdCode}' could not resolve type of {argType} '{args[i]}'." );
+					throw new SCLCommandArgumentException ( $"Internal error: Argument {i + 1} for command '{Command.CmdCode}' could not resolve type of {argType} '{args[i]}'.", OriginalLine );
 			}
 		}
 
@@ -690,3 +692,8 @@ internal class SubCommandParser : SubParserBase {
 		Context.Status.PushCommand ( call );
 	}
 }
+
+
+
+
+

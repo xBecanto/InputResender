@@ -308,7 +308,14 @@ public class CommandResult {
 
 public class ErrorCommandResult : CommandResult {
 	public readonly CommandResult OrigResult;
-	public ErrorCommandResult ( CommandResult origResult, Exception ex ) : base ( ex ) => OrigResult = origResult;
+
+	public ErrorCommandResult ( CommandResult origResult, Exception ex ) : base ( ex ) {
+		ArgumentNullException.ThrowIfNull ( origResult );
+		ArgumentNullException.ThrowIfNull ( ex );
+		OrigResult = origResult;
+	}
+
+	public ErrorCommandResult ( string message ) : base ( message, false, new (message) ) => OrigResult = null;
 	public override string ToString () => $"Error result: {Exception} | {OrigResult}";
 }
 

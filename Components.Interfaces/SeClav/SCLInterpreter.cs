@@ -9,18 +9,19 @@ public class SCLRunner : ICommand {
 		public List<int> InactivePCs;
 	}
 
-	private readonly ISCLParsedScript Script;
+	private ISCLParsedScript Script;
 	public string CmdCode => "SCLInterpreter";
 	public string CommonName => "SeClav Language Interpreter";
 	public string Description => "Executes SeClav Language scripts.";
 	public int ArgC => 0; // Arguments for script not supported yet
 	public readonly SIdVal NoArg = new ( 0, 0 );
 	public readonly SIdVal NoDst = new ( SCLInterpreter.ResultTypeID, 0 );
-	public readonly int WatchdogMax;
+	public int WatchdogMax { get; private set; }
 	
 	internal delegate int DebuggerCB ( int PC, CmdCall cmd, string disassembly, ISCLRuntime runtime );
 	internal DebuggerCB DebuggerCallback;
 	internal int nextBreakpoint = int.MaxValue;
+	internal int lastPC = 0;
 
 	private readonly Queue<int> ActivePCs = [];
 	private RunnerStatus Status;
@@ -36,13 +37,29 @@ public class SCLRunner : ICommand {
 		Script = script ?? throw new ArgumentNullException ( nameof ( script ) );
 		WatchdogMax = watchdogMax;
 	}
+
+	internal void IncreaseWatchdog ( int additionalSteps )
+		=> WatchdogMax = Math.Min ( WatchdogMax + additionalSteps, int.MaxValue );
+
+	internal void UpdateScript ( ISCLParsedScript script ) {
+		Script = script ?? throw new ArgumentNullException ( nameof(script) );
+	}
+
 	public SCLRunner ( SCLScriptHolder scriptHolder, int watchdogMax = int.MaxValue ) : this ( scriptHolder?.ParsedScript, watchdogMax ) { }
 
 	public IReadOnlyList<(string name, DataTypeDefinition type, string description)> Args => throw new NotImplementedException ();
 
 	public DataTypeDefinition ReturnType => throw new NotImplementedException ();
 
+	internal IDataType Execute ( ISCLRuntime runtime, IReadOnlyList<SIdVal> args, ref int startPC ) {
+		ActivePCs.Enqueue ( startPC );
+		var ret = Execute ( runtime, args );
+		startPC = lastPC;
+		return ret;
+	}
+
 	public IDataType Execute ( ISCLRuntime runtime, IReadOnlyList<SIdVal> args ) {
+		bool resetFlags = Status.InactivePCs?.Count > 0;
 		Status.InactivePCs ??= [];
 		List<SIdVal> argIDs = [];
 		int watchdog = 0;
@@ -57,7 +74,8 @@ public class SCLRunner : ICommand {
 			if ( watchdog++ >= WatchdogMax )
 				throw new InvalidOperationException ( $"Watchdog limit of {WatchdogMax} exceeded. Possible infinite loop detected." );
 			int PC = ActivePCs.Dequeue ();
-			runtime.ResetFlag ( ~ISCLRuntime.SCLFlags.Empty );
+			if ( resetFlags ) runtime.ResetFlag ( ~ISCLRuntime.SCLFlags.Empty );
+			resetFlags = true;
 			int N = Script.CommandIndices.Count;
 			while ( PC < N ) {
 				CmdCall cmdIndices = Script.CommandIndices[PC];
@@ -101,10 +119,22 @@ public class SCLRunner : ICommand {
 				}
 				PC++;
 			}
+			lastPC = PC;
 		}
 		return null;
 	}
+
+	public IDataType ExecuteSafe (
+		ISCLRuntime runtime, IReadOnlyList<SIdVal> args, ref int startPC, ref List<string> progress
+	) {
+		ActivePCs.Enqueue ( startPC );
+		var ret = ExecuteSafe ( runtime, args, ref progress );
+		startPC = lastPC;
+		return ret;
+	}
+
 	public IDataType ExecuteSafe ( ISCLRuntime runtime, IReadOnlyList<SIdVal> args, ref List<string> progress ) {
+		bool resetFlags = Status.InactivePCs?.Count > 0;
 		Status.InactivePCs ??= [];
 		progress = [];
 		List<SIdVal> argIDs = [];
@@ -123,7 +153,8 @@ public class SCLRunner : ICommand {
 				int PC = ActivePCs.Dequeue ();
 				DebuggerCallback?.Invoke ( PC, new CmdCall (), $" -- Starting at PC={PC}.", runtime );
 				// Clear all flags when starting new FSM state
-				runtime.ResetFlag ( ~ISCLRuntime.SCLFlags.Empty );
+				if ( resetFlags ) runtime.ResetFlag ( ~ISCLRuntime.SCLFlags.Empty );
+				resetFlags = true;
 				int N = Script.CommandIndices.Count;
 				while ( PC < N ) {
 					if ( PC < 0 || PC >= N )
@@ -237,7 +268,7 @@ public class SCLRunner : ICommand {
 public class SCLInterpreter : ComponentBase<CoreBase> {
 	public enum ExecMode { Normal, Safe };
 	readonly DModuleLoader ModuleLoader;
-	SCLRuntime Runtime;
+	SCLRuntimeLocked Runtime;
 	SCLRunner Runner;
 	public readonly int WatchdogMax;
 
@@ -263,8 +294,8 @@ public class SCLInterpreter : ComponentBase<CoreBase> {
 			parser.ProcessLine ( line );
 		ISCLParsedScript script = parser.GetResult ();
 
-		Runtime = new SCLRuntime ( script );
-		Runner = new SCLRunner ( script, WatchdogMax );
+		Runtime = new ( script );
+		Runner = new ( script, WatchdogMax );
 	}
 
 	public List<string> Run ( ExecMode mode = ExecMode.Normal ) {

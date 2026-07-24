@@ -3,28 +3,77 @@ using Components.Library;
 using System.Linq;
 
 namespace SeClav;
-internal class SCLRuntime : ISCLRuntime {
+internal class SCLRuntimeLocked ( ISCLParsedScript script ) : SCLRuntimeWorker ( script );
+
+internal class SCLRuntimeExpandable : SCLRuntimeWorker {
+	private readonly List<IDataType> variables;
+	private readonly List<IDataType> results;
+
+	public SCLRuntimeExpandable ( ISCLParsedScript script ) : base ( script, out var vars, out var res ) {
+		variables = vars;
+		results = res;
+	}
+
+	public new void Expand ( ISCLParsedScript script ) {
+		base.Expand ( script );
+		var tmpVariables = script.VariableTypes.Select ( t => {
+			if ( t < 0 || t >= script.DataTypes.Count )
+				throw new IndexOutOfRangeException ( $"Variable type index {t} is out of range <0|{script.DataTypes.Count}>." );
+			return script.DataTypes[t].Default;
+		} ).ToList ().AsReadOnly ();
+		var tmpResults = script.ResultTypes.Select ( t => {
+			if ( t < 0 || t >= script.DataTypes.Count )
+				throw new IndexOutOfRangeException ( $"Result type index {t} is out of range <0|{script.DataTypes.Count}>." );
+			return script.DataTypes[t].Default;
+		} ).ToList ().AsReadOnly ();
+
+		if (tmpVariables.Count < Variables.Count || tmpResults.Count < Results.Count)
+			throw new InvalidOperationException ( $"Cannot shrink the runtime memory. Current variables: {Variables.Count}, new variables: {tmpVariables.Count}. Current results: {Results.Count}, new results: {tmpResults.Count}." );
+
+		for ( int i = 0; i < Variables.Count; i++ ) {
+			if ( Variables[i].Definition == tmpVariables[i].Definition ) continue;
+			throw new InvalidOperationException ( $"Cannot change existing variable definition. Variable ID {i} has definition {Variables[i].Definition.Name}({Variables[i].Definition.Owner}), attempted to change to {tmpVariables[i].Definition.Name}({tmpVariables[i].Definition.Owner})." );
+		}
+		for ( int i = 0; i < Results.Count; i++ ) {
+			if ( Results[i] == null && tmpResults[i] == null ) continue;
+			if ( Results[i].Definition == tmpResults[i].Definition ) continue;
+			throw new InvalidOperationException ( $"Cannot change existing result definition. Result ID {i} has definition {Results[i].Definition.Name}({Results[i].Definition.Owner}), attempted to change to {tmpResults[i].Definition.Name}({tmpResults[i].Definition.Owner})." );
+		}
+
+		for (int i = Variables.Count; i < tmpVariables.Count; i++)
+			variables.Add ( tmpVariables[i] );
+		for (int i = Results.Count; i < tmpResults.Count; i++)
+			results.Add ( tmpResults[i] );
+	}
+}
+
+internal abstract class SCLRuntimeWorker : ISCLRuntime {
 	public ISCLParsedScript Script;
-	public IReadOnlyList<IDataType> Variables;
-	public IReadOnlyList<IDataType> Results;
+	public readonly IReadOnlyList<IDataType> Variables;
+	public readonly IReadOnlyList<IDataType> Results;
 	private ISCLRuntime.SCLFlags flags;
 
 	private const int VarIdMask = SCLInterpreter.VarIdMask;
 	private const int VarIdShift = SCLInterpreter.VarIdShift;
 
 
-	public SCLRuntime ( ISCLParsedScript script ) {
+	protected SCLRuntimeWorker ( ISCLParsedScript script ) : this ( script, out var _, out var _ ) { }
+
+	protected SCLRuntimeWorker ( ISCLParsedScript script, out List<IDataType> variables, out List<IDataType> results ) {
 		Script = script ?? throw new ArgumentNullException ( nameof ( script ) );
-		Variables = script.VariableTypes.Select ( t => {
+
+		variables = script.VariableTypes.Select ( t => {
 			if ( t < 0 || t >= script.DataTypes.Count )
 				throw new IndexOutOfRangeException ( $"Variable type index {t} is out of range <0|{script.DataTypes.Count}>." );
 			return script.DataTypes[t].Default;
-		} ).ToList ().AsReadOnly ();
-		Results = script.ResultTypes.Select ( t => {
+		} ).ToList ();
+		results = script.ResultTypes.Select ( t => {
 			if ( t < 0 || t >= script.DataTypes.Count )
 				throw new IndexOutOfRangeException ( $"Result type index {t} is out of range <0|{script.DataTypes.Count}>." );
 			return script.DataTypes[t].Default;
-		} ).ToList ().AsReadOnly ();
+		} ).ToList ();
+		Variables = variables.AsReadOnly ();
+		Results = results.AsReadOnly ();
 
 		foreach ( var (id, getter) in script.Getters) {
 			if ( id < 0 || id >= Variables.Count )
@@ -34,6 +83,10 @@ internal class SCLRuntime : ISCLRuntime {
 				throw new InvalidOperationException ( $"Getter for variable ID {id} returned type {val.Definition.Name}({val.Definition.Owner}), expected {Variables[id].Definition.Name}({Variables[id].Definition.Owner})." );
 			Variables[id].Assign ( val );
 		}
+	}
+
+	protected void Expand ( ISCLParsedScript script ) {
+		Script = script ?? throw new ArgumentNullException ( nameof ( script ) );
 	}
 
 	public IDataType SafeGetVar ( SIdVal varID ) {
@@ -161,7 +214,7 @@ public class SCLDebugger {
 }
 
 public class SCLRuntimeHolder {
-	internal SCLRuntime BaseRuntime;
+	internal SCLRuntimeLocked BaseRuntime;
 	private readonly HashSet<string> UnassignedExternals = new ();
 	private List<string> Errors = [], Log = [];
 	private readonly int WatchdogMax;
@@ -178,7 +231,7 @@ public class SCLRuntimeHolder {
 
 	public void ResetStatus () => PersistentStatus = null;
 
-	internal SCLRuntimeHolder ( SCLRuntime runtime, int watchdogMax = int.MaxValue ) {
+	internal SCLRuntimeHolder ( SCLRuntimeLocked runtime, int watchdogMax = int.MaxValue ) {
 		if ( runtime == null )
 			throw new ArgumentNullException ( nameof ( runtime ) );
 		BaseRuntime = runtime;
@@ -194,7 +247,7 @@ public class SCLRuntimeHolder {
 	}
 
 	public SCLRuntimeHolder ( SCLScriptHolder scriptHolder, int watchdogMax = int.MaxValue )
-		: this ( new SCLRuntime ( scriptHolder?.ParsedScript ), watchdogMax ) { }
+		: this ( new SCLRuntimeLocked ( scriptHolder?.ParsedScript ), watchdogMax ) { }
 
 	public IDataType SafeGetVar ( SIdVal varID ) => BaseRuntime.SafeGetVar ( varID );
 	public void SafeSetVar ( SIdVal varID, IDataType value ) => BaseRuntime.SafeSetVar ( varID, value );

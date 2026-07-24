@@ -9,7 +9,7 @@ using System.Threading.Tasks;
 using TArg = SeClav.SId<SeClav.ArgTag>;
 
 namespace Components.InterfaceTests.SeClav;
-internal class SCLAssertionRuntime : SCLRuntime {
+internal class SCLAssertionRuntime : SCLRuntimeLocked {
 	public SCLDebugger Debugger;
 	public List<string> ProgressInfo;
 	readonly ISCLDebugInfo DebugInfo;

@@ -6,6 +6,7 @@ using System.Diagnostics;
 using Xunit;
 using Xunit.Abstractions;
 using Components.Library;
+using Components.Interfaces.SeClav.Parsing;
 
 namespace Components.InterfaceTests.SeClav;
 public class SCLIntegrationTests {
@@ -225,16 +226,16 @@ public class SCLIntegrationTests {
 	[Fact]
 	public void UseInvalidGuider_LeftGuider () {
 		Action parse = () => parser.ProcessLine ( "Join_strings result = Values: < 1<,2<,3<" );
-		parse.Should ().Throw<InvalidOperationException> ();
+		parse.Should ().Throw<SCLParsingException> ();
 
 		parse = () => parser.ProcessLine ( "Join strings result2 = Values: | 1|,2|,6=asdf" );
-		parse.Should ().Throw<InvalidOperationException> ();
+		parse.Should ().Throw<SCLParsingException> ();
 	}
 
 	[Fact]
 	public void UseInvalidGuider_RightGuider () {
 		Action parse = () => parser.ProcessLine ( "ADD_OR_APPEND -> result a . s . d . 40 + 2" );
-		parse.Should ().Throw<InvalidOperationException> ();
+		parse.Should ().Throw<SCLParsingException> ();
 	}
 
 	[Theory]
@@ -671,5 +672,15 @@ public class SCLIntegrationTests {
 		holder.Execute ( safe );
 		var (_, val) = assertionRuntime.VarExists<TestValueStringDef, TestValueString> ( varName );
 		val.Value.Should ().Be ( expected );
+	}
+
+	[Fact]
+	public void DuplicateUsingIsWarnedAndIgnored () {
+		var messages = new List<string> ();
+		var parserWithWarnings = new SCLParsing ( name => name == testModule.Name ? testModule : null, messages.Add, enableLogging: true );
+		parserWithWarnings.ProcessLine ( "@using " + testModule.Name );
+		Action act = () => parserWithWarnings.ProcessLine ( "@using " + testModule.Name );
+		var ex = act.Should ().Throw<SCLDuplicateUsingException> ().Which;
+		ex.IsWarning.Should ().BeTrue ();
 	}
 }

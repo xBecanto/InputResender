@@ -9,6 +9,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Components.Interfaces;
+using Components.Interfaces.SeClav;
 
 namespace InputResender.CLI; 
 public class FactoryCommandsLoader : ACommandLoader<DMainAppCore> {
@@ -59,6 +60,7 @@ public class SeClavCommandLoader : ACommandLoader<DMainAppCore> {
 	public SeClavCommandLoader ( DMainAppCore owner ) : base ( owner, "seclavCmds" ) { }
 	private static Dictionary<Type, Func<DMainAppCore, DCommand<DMainAppCore>>> NewCommandList = new () {
 		{ typeof(SeClavRunnerCommand), ( core ) => new SeClavRunnerCommand ( core ) },
+		{ typeof(SCL_REPL), ( core ) => new SCL_REPL ( core )},
 	};
 	protected override IReadOnlyCollection<Func<DMainAppCore, DCommand<DMainAppCore>>> NewCommands
 		=> NewCommandList.Values.Select<Func<DMainAppCore, DCommand<DMainAppCore>>, Func<DMainAppCore, DCommand<DMainAppCore>>>( f

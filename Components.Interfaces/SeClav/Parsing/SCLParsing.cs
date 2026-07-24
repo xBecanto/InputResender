@@ -11,7 +11,7 @@ internal class SCLParsing {
 	//private readonly DModuleLoader ModuleLoader;
 	private readonly System.Func<string, IModuleInfo> ModuleLoader;
 	private readonly SCLParsingStatus Status;
-	readonly TOpCode AssignOpCode, ThrowOpCode;
+	private readonly TOpCode AssignOpCode, ThrowOpCode, NopOpCode;
 	private readonly List<string> Log = [];
 	public Action<string> Logger;
 	public bool EnableLogging;
@@ -25,6 +25,7 @@ internal class SCLParsing {
 		EnableLogging = enableLogging;
 		ModuleLoader = moduleLoader;
 		Status = new ();
+		NopOpCode = Status.RegisterCustomCmd ( new SCL_NOP () );
 		AssignOpCode = Status.RegisterCustomCmd ( new CmdAssignment () );
 		ThrowOpCode = Status.RegisterCustomCmd ( new ThrowCmd () );
 		Status.RegisterPraeDirective ( "in", RegisterExternalInput );
@@ -58,9 +59,9 @@ internal class SCLParsing {
 
 	private void RegisterExternalMapper ( SCLParsingContext context, ArgParser args ) {
 		if (args.ArgC != 4)
-			throw new InvalidOperationException ( $"@mapper directive expects exactly 3 arguments: output type, mapper name, input type, separated by colon ':'. Got {args.ArgC - 1}." );
+			throw new SCLDirectiveException ( $"@mapper directive expects exactly 3 arguments: output type, mapper name, input type, separated by colon ':'. Got {args.ArgC - 1}.", args.Line ( 0 ) );
 		if ( args.String ( 2, null, 1, true ) != ":" )
-			throw new InvalidOperationException ( $"@mapper directive expects exactly 3 arguments: output type, mapper name, input type, separated by colon ':'. Got '{args.String ( 2, null, 1, true )}' instead of ':'." );
+			throw new SCLDirectiveException ( $"@mapper directive expects exactly 3 arguments: output type, mapper name, input type, separated by colon ':'. Got '{args.String ( 2, null, 1, true )}' instead of ':'.", args.Line ( 0 ) );
 
 		string outName = args.String ( 0, "Name of the output variable to register the external mapper into", 1, true );
 		string mapperName = args.String ( 1, "Name of the mapper to register", 1, true );
@@ -73,8 +74,8 @@ internal class SCLParsing {
 
 	private void RegisterExternalFunction ( SCLParsingContext context, ArgParser args ) {
 		const int ARGS_START = 3;
-		if ( args.ArgC < ARGS_START + 1 ) throw new InvalidOperationException ( $"@mapper directive expects at least 3 arguments: output type, function name, input type, separated by colon ':'. Got {args.ArgC - 1}." );
-		if ( args.String ( 2, null, 1, true ) != ":" ) throw new InvalidOperationException ( $"@mapper directive expects exactly 3 arguments: output type, function name, input type, separated by colon ':'. Got '{args.String ( 2, null, 1, true )}' instead of ':'." );
+		if ( args.ArgC < ARGS_START + 1 ) throw new SCLDirectiveException ( $"@mapper directive expects at least 3 arguments: output type, function name, input type, separated by colon ':'. Got {args.ArgC - 1}.", args.Line ( 0 ) );
+		if ( args.String ( 2, null, 1, true ) != ":" ) throw new SCLDirectiveException ( $"@mapper directive expects exactly 3 arguments: output type, function name, input type, separated by colon ':'. Got '{args.String ( 2, null, 1, true )}' instead of ':'.", args.Line ( 0 ) );
 
 		string returnTypeName = args.String ( 0, "Name of the return type", 1, true );
 		string funcName = args.String ( 1, "Name of the function to register", 1, true );
@@ -99,11 +100,11 @@ internal class SCLParsing {
 
 	private void ProcessEmitMacro (ushort flags, string eventName, bool suspending ) {
 		if (!CurrentActiveState.Transitions.TryGetValue (eventName, out var existing) )
-			throw new InvalidOperationException ( $"Current active state '{CurrentActiveState.StateName}' does not have a transition for event '{eventName}', which is required to use 'emit' macro with that event name." );
+			throw new SCLStateTransitionException ( $"Current active state '{CurrentActiveState.StateName}' does not have a transition for event '{eventName}', which is required to use 'emit' macro with that event name.", CurrentActiveState.OriginalLine );
 		ushort opCode = 0;
 		if (suspending) {
 			if ( existing.canParallel )
-				throw new NotImplementedException ( $"Suspending emit macro with parallel transition is not supported yet." );
+				throw new SCLStateTransitionException ( $"Suspending emit macro with parallel transition is not supported yet.", CurrentActiveState.OriginalLine );
 			opCode = ISCLParsedScript.SUSPEND_OPCODE_ID;
 		} else {
 			opCode = existing.canParallel ? ISCLParsedScript.FORK_OPCODE_ID : ISCLParsedScript.JMP_OPCODE_ID;
@@ -115,10 +116,13 @@ internal class SCLParsing {
 		FinishParsing ();
 		return new SCLParsingStatus.SCLParsedScript ( Status );
 	}
-	public ISCLDebugInfo GetResultWithDebugInfo () {
-		FinishParsing ();
+
+	public ISCLDebugInfo GetResultWithDebugInfo (bool finalize = true, bool allowNonexistingJumps = false) {
+		if ( finalize ) FinishParsing ();
+		if ( allowNonexistingJumps ) Status.ReplaceNonexistingJumpsWithNOPs = true;
 		return new SCLParsingStatus.SCLDebugInfo ( Status, Log );
 	}
+
 	private void FinishParsing () {
 		// It is a question if this should actually close up the script or should just 'prepare' it for generating the result, without modifying the underlying Status. For now, this is destructive action, but it might be a useful feature to allow calling Finalize multiple times, for producing different scripts from the same source. (Create one script, add some more lines, create another script with the same Status but different content, etc.)
 
@@ -219,6 +223,6 @@ internal class SCLParsing {
 			commandResult.Apply ();
 			return;
 		}
-		throw new InvalidOperationException ( $"Could not parse line: '{originalLine}'." );
+		throw new SCLSyntaxException ( $"Could not parse line: '{originalLine}'.", originalLine );
 	}
 }

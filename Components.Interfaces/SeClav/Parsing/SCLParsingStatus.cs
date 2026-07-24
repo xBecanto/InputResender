@@ -1,4 +1,5 @@
 ﻿using Components.Library;
+using Components.Interfaces.SeClav.Parsing;
 using SeClav.Commands;
 using SeClav.DataTypes;
 using TOpCode = SeClav.SId<SeClav.OpCodeTag>;
@@ -35,12 +36,20 @@ internal class SCLParsingStatus {
 		public SCLParsedScript ( SCLParsingStatus parsingStatus ) {
 			// Also could have/extract from status some disassembly info (closer discussion in diary)
 
-			foreach ( (string targetState, int cmdIndex) in parsingStatus.StateJumps ) {
-				if ( !parsingStatus.StateStarts.TryGetValue ( targetState, out int stateStart ) )
-					throw new InvalidOperationException ( $"State jump target '{targetState}' does not have a registered state start." );
+			foreach ( (string targetState, int cmdIndex, TOpCode opCode) in parsingStatus.StateJumps ) {
+				if ( !parsingStatus.StateStarts.TryGetValue ( targetState, out int stateStart ) ) {
+					if ( !parsingStatus.ReplaceNonexistingJumpsWithNOPs )
+						throw new SCLParsingException (
+							$"State jump target '{targetState}' does not have a registered state start."
+						);
+
+					parsingStatus.commandIndices[cmdIndex] = SCL_NOP.Create ( parsingStatus );
+					continue;
+				}
+
 				CmdCall jmpCall = parsingStatus.commandIndices[cmdIndex];
 				parsingStatus.commandIndices[cmdIndex] = new CmdCall
-					( new TOpCode ( jmpCall.opCode )
+					( opCode
 					, SCLInterpreter.CrDst ( stateStart )
 					, jmpCall.flags
 					, new TArg ( jmpCall.arg1 )
@@ -65,7 +74,7 @@ internal class SCLParsingStatus {
 			ExternFunctions = parsingStatus.externFunctions.AsReadOnly ();
 
 			if (Disassembly.Count != CommandIndices.Count)
-				throw new InvalidOperationException ( $"Disassembly count ({Disassembly.Count}) does not match command indices count ({CommandIndices.Count})." );
+				throw new SCLParsingException ( $"Disassembly count ({Disassembly.Count}) does not match command indices count ({CommandIndices.Count})." );
 		}
 	}
 
@@ -100,7 +109,7 @@ internal class SCLParsingStatus {
 			ArgumentNullException.ThrowIfNull ( Name );
 			ArgumentNullException.ThrowIfNull ( getter );
 			if ( Status.variables.Any ( v => v.name == Name ) )
-				throw new InvalidOperationException ( $"Variable '{Name}' is already defined." );
+				throw new SCLDuplicateDefinitionException ( $"Variable '{Name}' is already defined." );
 			int varID = Status.variables.Count;
 			var defVal = getter ();
 			int dataTypeID = Status.GetDataTypeID ( defVal.Definition );
@@ -125,6 +134,7 @@ internal class SCLParsingStatus {
 	public Dictionary<string, int> inputSamplers = [];
 	public Dictionary<string, SIdVal> outputVars = [];
 	public Dictionary<string, int> externFunctions = [];
+	public bool ReplaceNonexistingJumpsWithNOPs = false;
 	//readonly List<Action<SCLParsedScript>> OnLoad = [];
 
 	readonly Dictionary<string, DataTypeDefinition> dataTypeMap = [];
@@ -133,7 +143,7 @@ internal class SCLParsingStatus {
 	readonly Dictionary<string, PraeDirective> praeDirectives = [];
 
 	readonly Dictionary<string, int> StateStarts = [];
-	readonly List<(string, int)> StateJumps = [];
+	readonly List<(string, int, TOpCode)> StateJumps = [];
 
 	readonly Dictionary<string, string> MemoryInfo = [];
 	public IReadOnlyDictionary<string, string> GetMemoryInfoRef () => MemoryInfo;
@@ -153,28 +163,33 @@ internal class SCLParsingStatus {
 	public void RegisterModule ( IModuleInfo module ) {
 		ArgumentNullException.ThrowIfNull ( module );
 		if ( modules.Any ( m => m.Name == module.Name ) )
-			throw new InvalidOperationException ( $"Module '{module.Name}' is already registered." );
+			throw new SCLDuplicateDefinitionException ( $"Module '{module.Name}' is already registered." );
 		modules.Add ( module );
 		foreach ( var cmd in module.Commands ) {
 			if ( commandMap.ContainsKey ( cmd.CmdCode ) )
-				throw new InvalidOperationException ( $"Command '{cmd.CmdCode}' is already defined." );
+				throw new SCLDuplicateDefinitionException ( $"Command '{cmd.CmdCode}' is already defined." );
 			commandMap[cmd.CmdCode] = cmd;
 		}
 		foreach ( var dt in module.DataTypes ) {
 			if ( dataTypeMap.ContainsKey ( dt.Name ) )
-				throw new InvalidOperationException ( $"Data type '{dt.Name}' is already defined." );
+				throw new SCLDuplicateDefinitionException ( $"Data type '{dt.Name}' is already defined." );
 			dataTypeMap[dt.Name] = dt;
 		}
 		foreach ( var macro in module.Macros ) {
 			if ( macros.ContainsKey ( macro.CmdCode ) )
-				throw new InvalidOperationException ( $"Macro '{macro.CmdCode}' is already defined." );
+				throw new SCLDuplicateDefinitionException ( $"Macro '{macro.CmdCode}' is already defined." );
 			macros[macro.CmdCode] = macro;
 		}
 		foreach ( var prae in module.PraeDirectives ) {
 			if ( praeDirectives.ContainsKey ( prae.Key ) )
-				throw new InvalidOperationException ( $"Prae directive '{prae.Key}' is already defined." );
+				throw new SCLDuplicateDefinitionException ( $"Prae directive '{prae.Key}' is already defined." );
 			praeDirectives[prae.Key] = prae.Value;
 		}
+	}
+
+	public bool IsModuleRegistered ( string moduleName ) {
+		ArgumentNullException.ThrowIfNull ( moduleName );
+		return modules.Any ( m => m.Name == moduleName );
 	}
 
 	public PraeDirective TryGetPraeDirective ( string name ) {
@@ -200,7 +215,7 @@ internal class SCLParsingStatus {
 	public TOpCode RegisterCustomCmd ( ICommand cmd ) {
 		ArgumentNullException.ThrowIfNull ( cmd );
 		if ( commands.Any ( c => c.CmdCode == cmd.CmdCode ) )
-			throw new InvalidOperationException ( $"Command '{cmd.CmdCode}' is already registered." );
+			throw new SCLDuplicateDefinitionException ( $"Command '{cmd.CmdCode}' is already registered." );
 		commands.Add ( cmd );
 		commandMap.Add ( cmd.CmdCode, cmd );
 		return SCLInterpreter.CrOpCode ( commands.Count - 1 );
@@ -209,14 +224,14 @@ internal class SCLParsingStatus {
 	public void RegisterPraeDirective (string name, PraeDirective prae) {
 		ArgumentNullException.ThrowIfNull ( prae );
 				if ( praeDirectives.ContainsKey ( name ) )
-			throw new InvalidOperationException ( $"Prae directive '{name}' is already defined." );
+			throw new SCLDuplicateDefinitionException ( $"Prae directive '{name}' is already defined." );
 		praeDirectives[name] = prae;
 	}
 
 	public void RegisterMacro ( IMacro macro ) {
 		ArgumentNullException.ThrowIfNull ( macro );
 		if ( macros.ContainsKey ( macro.CmdCode ) )
-			throw new InvalidOperationException ( $"Macro '{macro.CmdCode}' is already defined." );
+			throw new SCLDuplicateDefinitionException ( $"Macro '{macro.CmdCode}' is already defined." );
 		macros[macro.CmdCode] = macro;
 	}
 
@@ -229,6 +244,8 @@ internal class SCLParsingStatus {
 	public ICommand TryGetCommand ( string cmd ) {
 		ArgumentNullException.ThrowIfNull ( cmd );
 		if ( !commandMap.TryGetValue ( cmd, out ICommand command ) ) return null;
+		if ( commands.Contains ( command ) ) return command;
+
 		commands.Add ( command );
 		return command;
 	}
@@ -237,7 +254,7 @@ internal class SCLParsingStatus {
 		ArgumentNullException.ThrowIfNull ( cmd );
 		if ( !commands.Contains ( cmd ) ) {
 			if ( !commandMap.ContainsKey ( cmd.CmdCode ) )
-				throw new InvalidOperationException ( $"Command '{cmd.CmdCode}' ({cmd.CommonName}) is not registered nor present in any loaded module." );
+				throw new SCLParsingException ( $"Command '{cmd.CmdCode}' ({cmd.CommonName}) is not registered nor present in any loaded module." );
 			commands.Add ( cmd );
 		}
 		return commands.IndexOf ( cmd );
@@ -246,7 +263,7 @@ internal class SCLParsingStatus {
 	private void TranslateDataType (ref DataTypeDefinition dataType) {
 		if ( dataTypeMap.TryGetValue ( dataType.Name, out var existing ) )
 			dataType = existing;
-		else throw new InvalidOperationException ( $"Data type '{dataType.Name}' is not registered." );
+		else throw new SCLParsingException ( $"Data type '{dataType.Name}' is not registered." );
 		if (!dataTypes.Contains ( dataType ) )
 			dataTypes.Add ( dataType );
 	}
@@ -285,7 +302,7 @@ internal class SCLParsingStatus {
 		ArgumentNullException.ThrowIfNull ( name );
 		if ( string.IsNullOrEmpty ( name ) ) throw new ArgumentException ( "Variable name cannot be empty.", nameof ( name ) );
 		if ( variables.Any ( v => v.name == name ) )
-			throw new InvalidOperationException ( $"Variable '{name}' is already defined." );
+			throw new SCLDuplicateDefinitionException ( $"Variable '{name}' is already defined." );
 		var varID = SCLInterpreter.CrArgVar ( variables.Count );
 		variables.Add ( (dataType, name) );
 		UpdateMemoryInfo ();
@@ -331,13 +348,13 @@ internal class SCLParsingStatus {
 	public int RegisterStateStart ( string stateName ) {
 		ArgumentNullException.ThrowIfNullOrWhiteSpace ( stateName, nameof ( stateName ) );
 		if ( StateStarts.ContainsKey ( stateName ) )
-			throw new InvalidOperationException ( $"State '{stateName}' is already defined." );
+			throw new SCLDuplicateDefinitionException ( $"State '{stateName}' is already defined." );
 		return StateStarts[stateName] = commandIndices.Count;
 	}
 	public void RegisterStateJump ( string stateName, ushort opCode, ushort flagRequired ) {
 		ArgumentNullException.ThrowIfNullOrWhiteSpace ( stateName, nameof ( stateName ) );
-		StateJumps.Add ( ( stateName, commandIndices.Count ) );
 		TOpCode opCodeT = SCLInterpreter.CrOpCode ( opCode );
+		StateJumps.Add ( ( stateName, commandIndices.Count, opCodeT ) );
 		CmdCall jmp = new ( opCodeT, new TDst ( 0, 0 ), flagRequired );
 		PushCommand ( jmp );
 

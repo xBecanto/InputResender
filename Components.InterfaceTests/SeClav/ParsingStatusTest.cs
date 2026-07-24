@@ -7,6 +7,7 @@ using SeClav.Commands;
 using System.Linq;
 using Components.Library;
 using System.Collections.Generic;
+using Components.Interfaces.SeClav.Parsing;
 
 namespace Components.InterfaceTests.SeClav;
 public class ParsingStatusTest {
@@ -16,7 +17,6 @@ public class ParsingStatusTest {
 	public ParsingStatusTest () {
 		testModule = new ();
 		status = new ();
-		//parser.ProcessLine ( "@using " + testModule.Name );
 	}
 
 	private ISCLDebugInfo Init () {
@@ -44,7 +44,7 @@ public class ParsingStatusTest {
 	public void InvalidModuleRegistrationThrows () {
 		status.RegisterModule ( testModule );
 		Action act = () => status.RegisterModule ( testModule );
-		act.Should ().Throw<InvalidOperationException> ()
+		act.Should ().Throw<SCLDuplicateDefinitionException> ()
 			.And.Message.Should ().Contain ( testModule.Name )
 			.And.Contain ( "already registered" );
 	}
@@ -57,7 +57,7 @@ public class ParsingStatusTest {
 			.And.ContainSingle ( c => c.GetType () == typeof ( CmdAssignment ) );
 
 		Action act = () => status.RegisterCustomCmd ( new CmdAssignment () );
-		act.Should ().Throw<InvalidOperationException> ()
+		act.Should ().Throw<SCLDuplicateDefinitionException> ()
 			.And.Message.Should ().Contain ( "already registered" );
 	}
 
@@ -94,7 +94,7 @@ public class ParsingStatusTest {
 		var debugInfo = Init ();
 		var cmd = new CmdAssignment ();
 		Action act = () => status.GetCommandID ( cmd );
-		act.Should ().Throw<InvalidOperationException> ()
+		act.Should ().Throw<SCLParsingException> ()
 			.And.Message.Should ().Contain ( "not registered" )
 			.And.Contain ( cmd.CommonName );
 	}
@@ -132,7 +132,7 @@ public class ParsingStatusTest {
 		var debugInfo = Init ();
 		var dt = new SCLT_Void ();
 		Action act = () => status.GetDataTypeID ( dt );
-		act.Should ().Throw<InvalidOperationException> ()
+		act.Should ().Throw<SCLParsingException> ()
 			.And.Message.Should ().Contain ( "not registered" )
 			.And.Contain ( dt.Name );
 	}
@@ -162,7 +162,7 @@ public class ParsingStatusTest {
 		int dtID = status.GetDataTypeID ( dt );
 		status.RegisterVariable ( dtID, VAR_NAME );
 		Action act = () => status.RegisterVariable ( dtID, VAR_NAME );
-		act.Should ().Throw<InvalidOperationException> ()
+		act.Should ().Throw<SCLDuplicateDefinitionException> ()
 			.And.Message.Should ().Contain ( "already defined" )
 			.And.Contain ( VAR_NAME );
 

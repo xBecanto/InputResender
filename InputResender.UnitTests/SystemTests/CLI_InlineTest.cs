@@ -33,7 +33,7 @@ public class CLI_InlineTest ( ITestOutputHelper output ) {
 
 	[Fact]
 	public void HelloWorld () {
-		Exec ( out var Core, "--inline", "(print \"Hello, World!\")" )
+		Exec ( out var Core, "--inline", "--virtual", "(print \"Hello, World!\")" )
 			.Should ().BeFalse ( "Inline command should not continue into main loop" );
 		CmdResults.Should ().ContainSingle ( "There should be exactly one command processed" )
 			.Which.Should ().Be ( ("print \"Hello, World!\"", new ("Hello, World!")) );

@@ -73,8 +73,8 @@ public class BaseIntegrationTest : IDisposable {
 		Core = DMainAppCoreFactory.CreateDefault ();
 		Core.FileManager.FileService = new MockFileService ();
 		Core.FileManager.FileManagerWrapper = new FileManager_AutoAccept ( Core );
-		new Config ( "default", new ("password"), Core );
 		cliWrapper = new ( Core, console );
+		new Config ( "virtual", new ("password"), Core );
 
 		cliWrapper.CmdProc.SetVar ( CliWrapper.CLI_VAR_NAME, cliWrapper );
 		cliWrapper.CmdProc.AddCommand ( new BasicCommands<DMainAppCore> ( Core, console.WriteLine, console.Clear, () => throw new System.NotImplementedException () ) );
@@ -141,5 +141,22 @@ public class BaseIntegrationTest : IDisposable {
 			res.Message.Should ().NotBe ( nr ).And.NotContain ( nr );
 		res.Message.Should ().MatchRegex ( regex );
 		return res;
+	}
+
+	public ErrorCommandResult AssertExecError ( string cmd, string expRes, params string[] notRes ) {
+		var res = cliWrapper.ProcessLine ( cmd );
+		res.Should ().NotBeNull ().And.BeOfType<ErrorCommandResult> ();
+		foreach ( string nr in notRes ?? [] )
+			res.Message.Should ().NotBe ( nr ).And.NotContain ( nr );
+		res.Message.Should ().Be ( expRes );
+		return res as ErrorCommandResult;
+	}
+	public ErrorCommandResult AssertExecErrorByRegex ( string cmd, string regex, params string[] notRes ) {
+		var res = cliWrapper.ProcessLine ( cmd );
+		res.Should ().NotBeNull ().And.BeOfType<ErrorCommandResult> ();
+		foreach ( string nr in notRes ?? [] )
+			res.Message.Should ().NotBe ( nr ).And.NotContain ( nr );
+		res.Message.Should ().MatchRegex ( regex );
+		return res as ErrorCommandResult;
 	}
 }

@@ -236,19 +236,6 @@ public class ReadFlags : ICommand {
 	}
 }
 
-public class SCL_NOP : ICommand {
-	public string CmdCode => "NOP";
-	public string CommonName => "No Operation";
-	public string Description => "Does nothing, returns void. Current intented use-case is placeholder or simple debug marker.";
-	public int ArgC => 1;
-	public IReadOnlyList<(string name, DataTypeDefinition type, string description)> Args => [
-		("arg", new SCLT_Any (), "Argument to ignore")
-		];
-	public DataTypeDefinition ReturnType => new SCLT_Void ();
-	public IDataType Execute ( ISCLRuntime runtime, IReadOnlyList<SIdVal> args ) => ReturnType.Default;
-	public IDataType ExecuteSafe ( ISCLRuntime runtime, IReadOnlyList<SIdVal> args, ref List<string> progress ) => ReturnType.Default;
-}
-
 public class SCL_BasicModule : IModuleInfo {
 	public const string ModuleName = "BasicModule";
 	public string Name => ModuleName;
@@ -262,7 +249,7 @@ public class SCL_BasicModule : IModuleInfo {
 
 	public IReadOnlySet<ICommand> Commands => new HashSet<ICommand> () {
 		new AddInts (), new ConcatStrs (), new AppendIntToString (),
-		new ReadFlags (), new CompareInt (), new SCL_NOP (),
+		new ReadFlags (), new CompareInt (),
 	};
 
 	public IReadOnlySet<IMacro> Macros => new HashSet<IMacro> () {

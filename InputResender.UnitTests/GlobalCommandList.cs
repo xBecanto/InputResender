@@ -15,6 +15,7 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using System.Reflection;
 using System.Windows.Forms.VisualStyles;
+using Components.Interfaces.SeClav;
 using InputResender.WebUI.Commands;
 
 namespace InputResender.UnitTests;
@@ -42,6 +43,7 @@ internal class GlobalCommandList<CoreT> where CoreT : CoreBase {
 		typeof( PipelineCommand ),
 		typeof( SeClavRunnerCommand ),
 		typeof( SeClavModuleManagerCommand ),
+		typeof( SCL_REPL ),
 		typeof( BasicCommands<CoreT> ),
 		typeof( ContextVarCommands<CoreT> ),
 		typeof( CoreManagerCommand<CoreT> ),
