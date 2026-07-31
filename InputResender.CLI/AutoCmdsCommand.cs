@@ -89,45 +89,11 @@ public class AutoCmdsCommand : DCommand<DMainAppCore> {
 			var cliWrapper = context.CmdProc.GetVar<CliWrapper> ( CliWrapper.CLI_VAR_NAME );
 			int done = 0;
 			foreach ( var cmd in cmds ) {
-				if ( cmd.StartsWith ( '#' ) ) continue;
-
-				Dictionary<string, (string, string)> ifAssign = [];
-				Dictionary<string, (string, string)> ifNotAssign = [];
-
-				string Command = cmd;
-				while ( true ) {
-					if ( Command.StartsWith ( "?", out Command ) ) {
-						Command = Command.ExtractPrefix ( ' ', out string condition, 1, 1 );
-						if ( condition.ContainsPrefix ( '=', out string prefix, out string suffix, 1, 1 ) ) {
-							if ( suffix != config.GetEnv ( prefix ) ) continue;
-						} else if ( config.GetEnv ( condition ) == null ) continue;
-
-					} else if ( Command.StartsWith ( "=", out Command ) ) {
-						Command = Command.ExtractPrefix ( ' ', out string assignVal, 5, 1 );
-						assignVal = assignVal.ExtractPrefix ( ':', out string content, 1, 3 );
-						assignVal = assignVal.ExtractPrefix ( '=', out string assignName, 1, 1 );
-						ifAssign[content] = (assignName, assignVal);
-
-					} else if ( Command.StartsWith ( "!", out Command ) ) {
-						Command = Command.ExtractPrefix ( ' ', out string assignVal, 5, 1 );
-						assignVal = assignVal.ExtractPrefix ( ':', out string content, 1, 3 );
-						assignVal = assignVal.ExtractPrefix ( '=', out string assignName, 1, 1 );
-						ifNotAssign[content] = (assignName, assignVal);
-					} else
-						break;
-				}
-
-				CommandResult cmdRes = null;
-				cmdRes = Owner.Fetch<Config> ().PrintAutoCommands
-					? cliWrapper.ProcessLine ( Command, true )
-					: cliWrapper.CmdProc.ProcessLine ( Command );
-
-				foreach ( var (content, (envName, envVal)) in ifAssign ) {
-					if ( cmdRes.Message.Contains ( content ) ) config.SetEnv ( envName, envVal );
-				}
-
-				foreach ( var (content, (envName, envVal)) in ifNotAssign ) {
-					if ( !cmdRes.Message.Contains ( content ) ) config.SetEnv ( envName, envVal );
+				var res = ProcessNextCommand ( cmd, Owner, config, cliWrapper );
+				if ( res is ErrorCommandResult ) {
+					return new ErrorCommandResult ( res
+						, new InvalidOperationException ( $"Encountered error after {done} processed commands" )
+					);
 				}
 
 				done++;
@@ -137,5 +103,50 @@ public class AutoCmdsCommand : DCommand<DMainAppCore> {
 		default:
 			return new ( $"Unknown subcommand '{context.SubAction}'." );
 		}
+	}
+
+	public static CommandResult ProcessNextCommand ( string cmd, DMainAppCore Owner, Config config, CliWrapper cliWrapper )  {
+		if ( cmd.StartsWith ( '#' ) ) return null;
+
+		Dictionary<string, (string, string)> ifAssign = [];
+		Dictionary<string, (string, string)> ifNotAssign = [];
+
+		string Command = cmd;
+		while ( true ) {
+			if ( Command.StartsWith ( "?", out Command ) ) {
+				Command = Command.ExtractPrefix ( ' ', out string condition, 1, 1 );
+				if ( condition.ContainsPrefix ( '=', out string prefix, out string suffix, 1, 1 ) ) {
+					if ( suffix != config.GetEnv ( prefix ) ) return null;
+				} else if ( config.GetEnv ( condition ) == null ) return null;
+
+			} else if ( Command.StartsWith ( "=", out Command ) ) {
+				Command = Command.ExtractPrefix ( ' ', out string assignVal, 5, 1 );
+				assignVal = assignVal.ExtractPrefix ( ':', out string content, 1, 3 );
+				assignVal = assignVal.ExtractPrefix ( '=', out string assignName, 1, 1 );
+				ifAssign[content] = (assignName, assignVal);
+
+			} else if ( Command.StartsWith ( "!", out Command ) ) {
+				Command = Command.ExtractPrefix ( ' ', out string assignVal, 5, 1 );
+				assignVal = assignVal.ExtractPrefix ( ':', out string content, 1, 3 );
+				assignVal = assignVal.ExtractPrefix ( '=', out string assignName, 1, 1 );
+				ifNotAssign[content] = (assignName, assignVal);
+			} else
+				break;
+		}
+
+		CommandResult cmdRes = null;
+		cmdRes = Owner.Fetch<Config> ().PrintAutoCommands
+			? cliWrapper.ProcessLine ( Command, true )
+			: cliWrapper.CmdProc.ProcessLine ( Command );
+
+		foreach ( var (content, (envName, envVal)) in ifAssign ) {
+			if ( cmdRes.Message.Contains ( content ) ) config.SetEnv ( envName, envVal );
+		}
+
+		foreach ( var (content, (envName, envVal)) in ifNotAssign ) {
+			if ( !cmdRes.Message.Contains ( content ) ) config.SetEnv ( envName, envVal );
+		}
+
+		return cmdRes;
 	}
 }

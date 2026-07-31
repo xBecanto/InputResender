@@ -47,7 +47,7 @@ public class FileAccessService {
 
 		if ( IsAbsolutePath ( filename ) ) {
 			if ( allowMissingDir ) return filename;
-			if ( Exists ( filename ) ) return filename;
+			if ( Exists ( filename ) ) return new FileInfo ( filename ).FullName;
 			if ( allowMissingFile ) {
 				string dir = Path.GetDirectoryName ( filename );
 				if ( !string.IsNullOrEmpty ( dir ) && Directory.Exists ( dir ) ) return filename;
@@ -55,8 +55,6 @@ public class FileAccessService {
 			throw new FileNotFoundException ( $"Could not find file: {filename}" );
 		}
 
-		if ( File.Exists ( filename ) ) return filename;
-		if ( File.Exists ( basePath ) ) return basePath;
 		if ( Path.HasExtension ( basePath ) )
 			basePath = Path.GetDirectoryName ( basePath );
 

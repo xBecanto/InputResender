@@ -68,6 +68,7 @@ public class ArgParser {
 
 					if ( isQuoted || parDepth > 0 ) continue;
 				}
+				if ( isQuoted || parDepth > 0 ) continue;
 
 				if ( pos == N - 1 ) {
 					// End of line
@@ -406,7 +407,7 @@ public class ArgParser {
 	public void ConvertToSwitch ( int id, char sw, string name, bool shouldThrow = true ) {
 		Arg arg = RemoveArg ( id, shouldThrow );
 		SwitchesChar.Add ( sw, arg );
-		SwitchesName.Add ( name, arg );
+		SwitchesName.Add ( "--" + name, arg );
 	}
 	public void ConvertToSwitch ( string id, char sw, string name, bool shouldThrow = true ) {
 		var arg = this[id];
@@ -420,14 +421,14 @@ public class ArgParser {
 	public void RegisterOrConvertToSwitch ( char sw, string name, bool shouldThrow = true ) {
 		RegisterSwitch ( sw, name );
 		var arg = this[name];
-		if (arg?.value == null) {
-			if ( shouldThrow && !SwitchesName.ContainsKey ( name ) )
+		if ( arg?.value == null ) {
+			if ( shouldThrow && !SwitchesName.ContainsKey ( "--" + name ) )
 				throw new ArgumentException ( $"Argument '{name}' not found.", nameof(name) );
+
 			return;
 		}
+
 		arg.value = RemoveArg ( arg.value.Position, shouldThrow );
-		if ( SwitchesName.TryAdd(name, arg.value)) {
-			SwitchesChar.Add ( sw, arg.value );
-		}
+		if ( SwitchesName.TryAdd ( "--" + name, arg.value ) ) SwitchesChar.Add ( sw, arg.value );
 	}
 }

@@ -74,8 +74,12 @@ public static class Program {
 			var startCommands = cfg.FetchAutoCommands ( cfg.AutostartName );
 			foreach ( var cmd in startCommands ) {
 				if ( cmd == "exit" ) return false;
-				if ( cfg.PrintAutoCommands ) cliWrapper.ProcessLine ( cmd, true );
-				else cliWrapper.CmdProc.ProcessLine ( cmd );
+
+				var res = AutoCmdsCommand.ProcessNextCommand ( cmd, core, cfg, cliWrapper );
+				if ( res is ErrorCommandResult ) {
+					cliWrapper.Console.WriteLine ( $"Error while processing autostart command '{cmd}': {res.Message}" );
+					return false;
+				}
 			}
 		} else {
 			cfg.MaxOnelinerLength = -1;
