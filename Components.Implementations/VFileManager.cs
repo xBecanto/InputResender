@@ -5,6 +5,111 @@ using System.Security.Cryptography;
 
 namespace Components.Implementations;
 public class VFileManager : DFileManager {
+	public class HashHolder {
+		public enum SourceType { Text, Binary, Header, Direct, Password }
+
+		private readonly VFileManager Owner;
+		private readonly byte[] Hash;
+		private readonly bool IsMasked;
+		private readonly SourceType Source;
+		private readonly string SourceText;
+		private readonly byte[] SourceBinary;
+		private readonly string SourceHash;
+		private readonly PasswordHolder UsedPassword;
+		public string DebugInfo => GetDebugInfo ();
+
+		private HashHolder (
+			VFileManager owner, byte[] hash, SourceType source, bool isMasked = false, string sourceText = null
+			, byte[] sourceBinary = null, string sourceHash = null, PasswordHolder usedPassword = null
+		) {
+			ArgumentNullException.ThrowIfNull ( owner );
+			ArgumentNullException.ThrowIfNull ( hash );
+			if ( hash.Length != SHA3_256.HashSizeInBytes )
+				throw new ArgumentException ( $"Hash must be {SHA3_256.HashSizeInBytes} bytes long.", nameof(hash) );
+
+			Owner = owner;
+			Hash = hash;
+			IsMasked = isMasked;
+			Source = source;
+			SourceText = sourceText;
+			SourceBinary = sourceBinary;
+			SourceHash = sourceHash;
+			UsedPassword = usedPassword;
+
+			if ( !IsMasked ) {
+				Hash = Owner.ConvertHash(Hash);
+				IsMasked = true;
+			}
+		}
+
+		private static byte[] ToHash ( byte[] data ) => SHA3_256.HashData ( data );
+		private static byte[] ToBytes ( string data ) => System.Text.Encoding.UTF8.GetBytes ( data );
+
+		public HashHolder ( VFileManager owner, string content ) : this ( owner, ToHash ( ToBytes ( content ) ), SourceType.Text, sourceText: content ) { }
+		public HashHolder ( VFileManager owner, string content, PasswordHolder password ) : this ( owner, password.Mask ( ToHash ( ToBytes ( content ) ) ), SourceType.Text, sourceText: content, usedPassword: password ) { }
+		public HashHolder ( VFileManager owner, byte[] content ) : this ( owner, ToHash ( content ), SourceType.Binary, sourceBinary: content ) { }
+		public HashHolder ( VFileManager owner, byte[] hashBin, string hashText ) : this ( owner, hashBin, SourceType.Direct, sourceHash: hashText ) { }
+
+		public HashHolder ToMasked() => new (Owner, IsMasked ? Hash : Owner.ConvertHash(Hash), Source, true, SourceText, SourceBinary, SourceHash, UsedPassword);
+
+		public byte[] GetUnmasked() => IsMasked ? Owner.ConvertHash(Hash) : Hash;
+		public byte[] GetMasked() => IsMasked ? Hash : Owner.ConvertHash(Hash);
+
+		public string ToHex() => Convert.ToHexString(GetUnmasked());
+		public string ToBase64() => Convert.ToBase64String(GetUnmasked());
+
+		public bool Matches(HashHolder other) {
+			if ( other == null ) return false;
+			if (!IsMasked) throw new InvalidOperationException("Cannot compare unmasked hash with another hash.");
+			if (!other.IsMasked) throw new InvalidOperationException("Cannot compare masked hash with an unmasked hash.");
+			return Hash.SequenceEqual(other.Hash);
+		}
+
+		public bool IsEmpty() => Hash == null || Hash.Length == 0;
+
+		public override string ToString () => $"HashHolder(Source: {Source}, Masked: {IsMasked}, Hash: {ToHex()})";
+
+		public string GetDebugInfo() {
+			var sb = new System.Text.StringBuilder();
+			sb.AppendLine($"Source: {Source}, Masked: {IsMasked}");
+
+			if (SourceText != null) sb.AppendLine($"SourceText (string): {SourceText.Length} chars");
+			else if (SourceBinary != null) sb.AppendLine($"SourceBinary (binary): {SourceBinary.Length} bytes");
+			else if (SourceHash != null) sb.AppendLine($"SourceHash (string): {SourceHash.Length} chars");
+
+			byte[] ZeroAr = new byte[SHA3_256.HashSizeInBytes];
+			Array.Fill ( ZeroAr, (byte)0 ); // Should be zeroed by default but better be safe than sorry.
+
+			sb.AppendLine("Hash variants:");
+			try {
+				Print ( "Raw", Hash );
+				Print ( "Mask", Owner.ConvertHash(ZeroAr) );
+				Print ( "Unmasked", GetUnmasked () );
+				Print ( "Masked", GetMasked () );
+
+				if ( UsedPassword != null ) {
+					Print ( $"  Decrypted-Password", UsedPassword.Mask ( ZeroAr ) );
+					Print ( $"  Decrypted-Raw", UsedPassword.Mask ( Hash ) );
+					Print ( $"  Decrypted-Unmasked", UsedPassword.Mask ( GetUnmasked () ) );
+					Print ( $"  Decrypted-Masked", UsedPassword.Mask ( GetMasked () ) );
+				}
+			}
+			catch ( Exception ex ) { sb.AppendLine ( $"  Error generating variants: {ex.Message}" ); }
+
+			return sb.ToString();
+
+			void Print ( string name, byte[] ar ) {
+				sb.AppendLine($"  {name}-Hex: {Convert.ToHexString(ar)}");
+				sb.AppendLine($"  {name}-B64: {Convert.ToBase64String(ar)}");
+			}
+		}
+	}
+
+	public class HashIntegrityException ( string message, HashHolder hashInfo, string content )
+		: IntegrityException ( message, hashInfo.GetUnmasked (), content ) {
+		public readonly HashHolder HashInfo = hashInfo;
+	}
+
 	public override int ComponentVersion => 1;
 
 	public const int HashSizeHex = SHA3_256.HashSizeInBytes * 2;
@@ -31,7 +136,7 @@ public class VFileManager : DFileManager {
 	 * Good programmers who are skilled in encryption and security are more than welcome to implement better component variant. 😉
 	 */
 
-	private readonly Dictionary<string, byte[]> hashes = [];
+	private readonly Dictionary<string, HashHolder> hashes = [];
 	private readonly byte[] iv;
 	private readonly int ivN;
 
@@ -47,10 +152,14 @@ public class VFileManager : DFileManager {
 	}
 
 	public override void WhitelistHash ( string filePath, string hash ) {
-		if ( hashes.ContainsKey ( filePath ) )
-			throw new InvalidOperationException ( $"File {filePath} is already whitelisted." );
-		if ( !FileService.Exists ( filePath ) )
-			throw new FileNotFoundException ( $"File {filePath} not found." );
+		if ( hashes.ContainsKey ( filePath ) ) {
+			if ( hash != null ) throw new ArgumentException ( $"File {filePath} is already whitelisted." );
+
+			hashes.Remove ( filePath );
+			return;
+		}
+
+		if ( !FileService.Exists ( filePath ) ) throw new FileNotFoundException ( $"File {filePath} not found." );
 		ArgumentNullException.ThrowIfNull ( hash );
 
 		byte[] hashBytes;
@@ -67,55 +176,58 @@ public class VFileManager : DFileManager {
 			throw new ArgumentException ( $"Hash string has invalid length. Expected {HashSizeHex} for hex or {HashSizeBase64} for base64, but found {hash.Length}", nameof ( hash ) );
 		}
 
-		StoreHash ( filePath, hashBytes );
+		HashHolder hashHolder = new (this, hashBytes, hash);
+		StoreHash ( filePath, hashHolder );
 	}
 
 	public override string ReadFile ( string path ) {
-		if ( !FileService.Exists ( path ) )
-			throw new FileNotFoundException ( $"File {path} not found." );
+		if ( !FileService.Exists ( path ) ) throw new FileNotFoundException ( $"File {path} not found." );
 
 		string content = FileService.ReadAllText ( path );
-		byte[] hash = SHA3_256.HashData ( System.Text.Encoding.UTF8.GetBytes ( content ) );
+		HashHolder actualHash = new (this, content);
+		HashHolder expectedHash = ReadHash(path);
 
-		byte[] expected = ReadHash ( path );
-		if ( !hash.SequenceEqual ( expected ) )
-			throw new IntegrityException ( $"File {path} integrity check failed. Hash does not match the expected value.", hash, content );
+		if (!actualHash.Matches(expectedHash))
+			throw new HashIntegrityException ( $"File {path} integrity check failed. Hash does not match the expected value.", actualHash, content );
 
 		return content;
 	}
 
 	public override byte[] ReadBinary ( string path ) {
-		if ( !FileService.Exists ( path ) )
-			throw new FileNotFoundException ( $"File {path} not found." );
+		if ( !FileService.Exists ( path ) ) throw new FileNotFoundException ( $"File {path} not found." );
 
 		byte[] content = FileService.ReadAllBytes ( path );
-		byte[] hash = SHA3_256.HashData ( content );
+		HashHolder actualHash = new (this, content);
+		HashHolder expectedHash = ReadHash(path);
 
-		byte[] expected = ReadHash ( path );
-		if ( !hash.SequenceEqual ( expected ) )
-			throw new IntegrityException ( $"File {path} integrity check failed. Hash does not match the expected value.", hash, System.Text.Encoding.UTF8.GetString ( content ) );
+		if (!actualHash.Matches(expectedHash))
+			throw new HashIntegrityException ( $"File {path} integrity check failed. Hash does not match the expected value.", actualHash, System.Text.Encoding.UTF8.GetString ( content ) );
 
 		return content;
 	}
 
 	public override string ReadFileWithHeader ( string path, PasswordHolder password ) {
 		ArgumentNullException.ThrowIfNull ( password );
-		if ( !FileService.Exists ( path ) )
-			throw new FileNotFoundException ( $"File {path} not found." );
+		if ( !FileService.Exists ( path ) ) throw new FileNotFoundException ( $"File {path} not found." );
 
 		string content = FileService.ReadAllText ( path );
-		int firstLF = content.IndexOf ( '\n' );
-		int lastLF = content.LastIndexOf ( '\n' );
-		if ( firstLF == -1 || lastLF == -1 || firstLF == lastLF || firstLF != HashSizeBase64 + 1 )
-			throw new IntegrityException ( $"File {path} does not contain a valid header.", null, content );
 
-		string header = content[..firstLF].Trim();
-		content = content[firstLF..lastLF].Trim();
+		var firstBreak = content.NextLinebreak ();
+		var lastBreak = content.PrevLinebreak ();
 
-		byte[] encryptedHash = Convert.FromBase64String ( header );
-		byte[] expectedHash = CalcFileHeader ( content, password );
-		if ( !encryptedHash.SequenceEqual ( expectedHash ) )
-			throw new IntegrityException ( $"File {path} integrity check failed. Hash does not match the expected value.", expectedHash, content );
+		if ( !firstBreak.Valid || !lastBreak.Valid || firstBreak >= lastBreak || firstBreak.Start != HashSizeBase64 ) {
+			throw new HashIntegrityException ( $"File {path} does not contain a valid header.", CalcFileHeader ( content, password ), content );
+		}
+
+		string header = content[firstBreak.Before].Trim ();
+		content = content[firstBreak >> lastBreak].Trim ();
+
+		byte[] storedHashBytes = Convert.FromBase64String ( header );
+		HashHolder storedHash = new (this, storedHashBytes, header);
+		HashHolder expectedHash = CalcFileHeader ( content, password );
+
+		if ( !storedHash.Matches ( expectedHash ) )
+			throw new HashIntegrityException ( $"File {path} integrity check failed. Hash does not match the expected value.", expectedHash, content );
 
 		return content;
 	}
@@ -125,33 +237,19 @@ public class VFileManager : DFileManager {
 		ArgumentException.ThrowIfNullOrWhiteSpace ( path );
 		content = content.Trim ();
 
-		byte[] encryptedHash = CalcFileHeader ( content, password );
+		HashHolder encryptedHash = CalcFileHeader ( content, password );
 		var file = FileService.CreateText (  path );
-		file.WriteLine ( Convert.ToBase64String ( encryptedHash ) );
+		file.WriteLine ( Convert.ToBase64String ( encryptedHash.GetUnmasked() ) );
 		file.WriteLine ( content );
 		file.Close ();
 	}
 
 
-	private byte[] CalcFileHeader ( string content, PasswordHolder password ) {
-		byte[] hash = SHA3_256.HashData ( System.Text.Encoding.UTF8.GetBytes ( content ) );
-		return password.Mask ( hash );
-		/*using ( Aes aes = Aes.Create () ) {
-			aes.IV = new byte[ivN];
-			Array.Clear (  iv, 0, ivN );
-			password.Assign ( aes );
-			return aes.EncryptCbc ( hash, aes.IV );
-		}*/
-	}
+	private HashHolder CalcFileHeader ( string content, PasswordHolder password ) => new (this, content, password);
 
-	private void StoreHash( string path, byte[] hash ) {
-		hashes[path] = ConvertHash ( hash );
-	}
-	private byte[] ReadHash( string path ) {
-		if ( !hashes.TryGetValue ( path, out var hash ) )
-			return [];
-		return ConvertHash ( hash );
-	}
+	private void StoreHash( string path, HashHolder hash ) => hashes[path] = hash.ToMasked();
+	private HashHolder ReadHash( string path ) => hashes.GetValueOrDefault ( path );
+
 	private byte[] ConvertHash ( byte[] hash ) {
 		byte[] res = new byte[hash.Length];
 		for (int i = 0; i < hash.Length; i++ ) {

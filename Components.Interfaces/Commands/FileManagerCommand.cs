@@ -32,29 +32,31 @@ public class FileManagerCommand : DCommand<DMainAppCore> {
 
 	protected override CommandResult ExecIner ( CommandProcessor<DMainAppCore>.CmdContext context ) {
 		if ( TryPrintHelp ( context.Args, context.ArgID + 1, () => context.SubAction switch {
-			"find" => CallName + " find <FileName> [BasePath]\n\tFileName: Name of the file to find"
-				+ "\n\tBasePath: Starting directory (default: current directory)",
-			"verify" => CallName + " verify <FilePath> [-u|--update] [-s|--show] [-p|--password]"
-				+ "\n\tFilePath: Path to the file to verify integrity"
-				+ "\n\t--update: If integrity check fails, show content and prompt user to store new hash"
-				+ "\n\t--show: Show content of the tested file"
-				+ "\n\t--password: If set, provided password is used to calculate header of the file",
-			"whitelist" => CallName + " whitelist <FilePath> <Hash>\n\tFilePath: Path to the file\n\tHash: Expected hash (hex or base64)",
-			"read" => CallName + " read <FilePath> [-u|--update] [-p|--password]\n\tFilePath: Path to the file to read\n\t--update: If integrity check fails, show content and prompt user to store new hash\n\t--password: If set, provided password is used to calculate header of the file",
-			"write" => CallName + " write <FilePath> <Content> [-p|--password]\n\tFilePath: Path to the file\n\tContent: Content to write (header is generated automatically)\n\t--password: If set, provided password is used to calculate header of the file",
-			"changepass" => CallName + " changepass <FilePath> <OldPassword> <NewPassword>\n\tFilePath: Path to the file\n\tOldPassword: Current password protecting the file\n\tNewPassword: New password to set",
-			_ => null
-		}, out var helpRes ) ) return helpRes;
+				"find" => CallName + " find <FileName> [BasePath]\n\tFileName: Name of the file to find"
+					+ "\n\tBasePath: Starting directory (default: current directory)",
+				"verify" => CallName + " verify <FilePath> [-u|--update] [-s|--show] [-p|--password]"
+					+ "\n\tFilePath: Path to the file to verify integrity"
+					+ "\n\t--update: If integrity check fails, show content and prompt user to store new hash"
+					+ "\n\t--show: Show content of the tested file"
+					+ "\n\t--password: If set, provided password is used to calculate header of the file",
+				"whitelist" => CallName + " whitelist <FilePath> <Hash>\n\tFilePath: Path to the file\n\tHash: Expected hash (hex or base64)",
+				"read" => CallName + " read <FilePath> [-u|--update] [-p|--password]\n\tFilePath: Path to the file to read\n\t--update: If integrity check fails, show content and prompt user to store new hash\n\t--password: If set, provided password is used to calculate header of the file",
+				"write" => CallName + " write <FilePath> <Content> [-p|--password]\n\tFilePath: Path to the file\n\tContent: Content to write (header is generated automatically)\n\t--password: If set, provided password is used to calculate header of the file",
+				"changepass" => CallName + " changepass <FilePath> <OldPassword> <NewPassword>\n\tFilePath: Path to the file\n\tOldPassword: Current password protecting the file\n\tNewPassword: New password to set",
+				"hash" => CallName + " hash <FilePath [-p|--password]: Calculate hash of a file\n\tFilePath: Path to the file\n\t--password: If set, provided password is used to encrypt the hash as it would be used in a 'file with a header'",
+				_ => null
+			}, out var helpRes ) ) return helpRes;
 
-		switch ( context.SubAction ) {
-		case "find": return ExecFind ( context );
-		case "verify": return ExecVerify ( context );
-		case "whitelist": return ExecWhitelist ( context );
-		case "read": return ExecRead ( context );
-		case "write": return ExecWrite ( context );
-		case "changepass": return ExecChangePass ( context );
-		default: return new ( $"Unknown subcommand '{context.SubAction}'." );
-		}
+		return context.SubAction switch {
+			"find"         => ExecFind ( context )
+			, "verify"     => ExecVerify ( context )
+			, "whitelist"  => ExecWhitelist ( context )
+			, "read"       => ExecRead ( context )
+			, "write"      => ExecWrite ( context )
+			, "changepass" => ExecChangePass ( context )
+			, "hash"       => ExecHash ( context )
+			, _            => new ($"Unknown subcommand '{context.SubAction}'.")
+		};
 	}
 
 	private CommandResult ExecFind ( CommandProcessor<DMainAppCore>.CmdContext context ) {
@@ -81,7 +83,7 @@ public class FileManagerCommand : DCommand<DMainAppCore> {
 		string filePath = FindPath ( context, fm, 1 );
 		PasswordHolder pass = null;
 		if ( context.Args.Present ( "--password" ) )
-			pass = new (context.Args.String ( "password", "Password", 4, true ));
+			pass = new (context.Args.String ( "--password", "Password", 4, true ));
 
 		try {
 			string content = pass == null ? fm.ReadFile ( filePath ) : fm.ReadFileWithHeader ( filePath, pass );
@@ -122,7 +124,7 @@ public class FileManagerCommand : DCommand<DMainAppCore> {
 		if ( fm == null ) return new ( "DFileManager not found in active core." );
 
 		context.Args.RegisterSwitch ( 'p', "password" );
-		PasswordHolder pass = new (context.Args.String ( "password", "Password", 4, true ));
+		PasswordHolder pass = new (context.Args.String ( "--password", "Password", 4, true ));
 		string filePath = FindPath ( context, fm, 1 );
 
 		try {
@@ -143,7 +145,7 @@ public class FileManagerCommand : DCommand<DMainAppCore> {
 		if ( fm == null ) return new ( "DFileManager not found in active core." );
 
 		context.Args.RegisterSwitch ( 'p', "password" );
-		PasswordHolder pass = new (context.Args.String ( "password", "Password", 4, true ));
+		PasswordHolder pass = new (context.Args.String ( "--password", "Password", 4, true ));
 		string filePath = FindPath ( context, fm, 1 );
 		string content = context.Args.String ( context.ArgID + 2, "Content", 0, true );
 
@@ -175,6 +177,52 @@ public class FileManagerCommand : DCommand<DMainAppCore> {
 		} catch ( FileNotFoundException ex ) {
 			return new ( ex.Message );
 		}
+	}
+
+	public CommandResult ExecHash ( CommandProcessor<DMainAppCore>.CmdContext context ) {
+		var fm = GetFileManager ( context );
+		if ( fm == null ) return new ( "DFileManager not found in active core." );
+
+		context.Args.RegisterSwitch ( 'p', "password" );
+		context.Args.RegisterSwitch ( 'b', "binary" );
+		context.Args.RegisterSwitch ( 'd', "debug" );
+		PasswordHolder pass = null;
+		if ( context.Args.Present ( "--password" ) )
+			pass = new (context.Args.String ( "--password", "Password", 4, true ));
+
+		string filePath = FindPath ( context, fm, 1 );
+		try {
+			if (pass != null) fm.ReadFileWithHeader ( filePath, pass );
+			else if (context.Args.Present ( "--binary" )) fm.ReadBinary ( filePath );
+			else fm.ReadFile ( filePath );
+			return new ErrorCommandResult (
+				new ($"File '{filePath}' is whitelisted. Accessing those is not supported.")
+				, null
+			);
+		} catch ( DFileManager.IntegrityException ex ) {
+			if ( ex.Hash == null )
+				return new ErrorCommandResult ( new ($"Integrity check failed for '{filePath}': {ex.Message}"), ex);
+
+			string result = $"Hash (hex): {Convert.ToHexString ( ex.Hash )}\nHash (base64): {Convert.ToBase64String ( ex.Hash )}";
+			if (context.Args.Present ( "--debug" ) ) TryGetIntExDetails ( ex, ref result );
+			return new ( result );
+		} catch ( FileNotFoundException ex ) {
+			return new ErrorCommandResult ( new (ex.Message), ex );
+		}
+	}
+
+	private static void TryGetIntExDetails ( DFileManager.IntegrityException ex, ref string result ) {
+		if ( ex.GetType ().Name != "HashIntegrityException" ) return;
+
+		var hashInfoProp = ex.GetType().GetField("HashInfo");
+		if ( hashInfoProp == null ) return;
+
+		var hashInfo = hashInfoProp.GetValue(ex);
+		var getDebugInfoMethod = hashInfo?.GetType().GetMethod("GetDebugInfo");
+		if ( getDebugInfoMethod == null ) return;
+
+		string debugInfo = getDebugInfoMethod.Invoke(hashInfo, null) as string;
+		result += "\n\nDEBUG - Detailed Hash Information:\n" + debugInfo.PrefixAllLines("  ");
 	}
 
 	public static string FindPath ( CommandProcessor<DMainAppCore>.CmdContext context, IFileManager fm, int argOffsetID ) {

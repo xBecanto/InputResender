@@ -253,6 +253,35 @@ public static class MdxExtensions {
 		return ret;
 	}
 
+	public static Part NextLinebreak ( this string text, int startID = 0 ) {
+		int nextN = text.IndexOf ( '\n', startID );
+		int nextR = text.IndexOf ( '\r', startID );
+		if ( nextN < 0 && nextR < 0 ) return new (-1, -1);
+		if ( nextN < 0 ) return new (nextR, nextR + 1);
+		if ( nextR < 0 ) return new (nextN, nextN + 1);
+
+		int min = Math.Min ( nextN, nextR );
+		int max = Math.Max ( nextN, nextR );
+		if ( max == min + 1 ) return new (min, max + 1);
+
+		return new (min, min + 1);
+	}
+
+	public static Part PrevLinebreak ( this string text, int startID = -1 ) {
+		if ( startID < 0 ) startID = text.Length - 1;
+		int prevN = text.LastIndexOf ( '\n', startID );
+		int prevR = text.LastIndexOf ( '\r', startID );
+		if ( prevN < 0 && prevR < 0 ) return new (-1, -1);
+		if ( prevN < 0 ) return new (prevR, prevR + 1);
+		if ( prevR < 0 ) return new (prevN, prevN + 1);
+
+		int max = Math.Max ( prevN, prevR );
+		int min = Math.Min ( prevN, prevR );
+		if ( max == min + 1 ) return new (min, max + 1);
+
+		return new (max, max + 1);
+	}
+
 	public static Type FindType ( string name ) {
 		if ( string.IsNullOrEmpty ( name ) ) return null;
 		var types = AppDomain.CurrentDomain.GetAssemblies ().SelectMany ( a => a.GetTypes () );

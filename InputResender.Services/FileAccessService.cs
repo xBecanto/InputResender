@@ -25,7 +25,7 @@ public class FileAccessService {
 	}
 
 
-	public string GetAssetPath (string basePath, string filename, SearchOptions searchOptions ) {
+	public virtual string GetAssetPath ( string basePath, string filename, SearchOptions searchOptions ) {
 		ArgumentException.ThrowIfNullOrWhiteSpace ( basePath );
 		ArgumentException.ThrowIfNullOrWhiteSpace ( filename );
 		if ( basePath.EndsWith ( filename ) )

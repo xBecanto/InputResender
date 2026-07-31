@@ -42,6 +42,8 @@ public abstract class DFileManager : ComponentBase<CoreBase>, IFileManager {
 		(nameof ( ReadBinary ), typeof( byte[] )),
 		(nameof ( WriteFileWithHeader ), typeof( void )),
 		(nameof ( GetWrapperOrSelf ), typeof( IFileManager )),
+		("get_" + nameof(FileService), typeof( FileAccessService )),
+		("set_" + nameof(FileService), typeof( void )),
 	};
 
 	public abstract void WhitelistHash ( string path, string hash );

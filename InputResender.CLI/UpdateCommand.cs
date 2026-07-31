@@ -17,20 +17,35 @@ using InputResender.Commands;
 
 namespace InputResender.CLI;
 public class UpdateCommand : DCommand<DMainAppCore> {
-	public override string Description => "Download and apply application updates from a remote build server.";
+	public override string Description
+		=> CallName + " <baseURL> -p <password> [--bundled|--targeted] [--apply] [--config] [--no-local] [--force]\n\t"
+			+ "Downloads and applies updates from a remote build server. By default only downloads; add --apply to also extract.\n\t"
+			+ "baseURL: Base URL of the build server (e.g., https://example.com/builds/)\n\t"
+			+ "password: Password that encrypts hashes used for integrity verification.\n\t"
+			+ "--bundled: Download fully self-contained build (default: targeted).\n\t"
+			+ "--targeted: Download build targeting pre-installed .NET runtime (default: targeted).\n\t"
+			+ "--apply: Extract the downloaded ZIP and restart the application.\n\t"
+			+ "--config: Also overwrite config.xml when applying.\n\t"
+			+ "--no-local: Do not use local build_info.txt for comparison; always download from server.\n\t"
+			+ "--force: Re-download even if already up to date.";
 	protected override bool PrintHelpOnEmpty => true;
 
 	private static List<string> CommandNames = ["update"];
 	private static List<(string, Type)> InterCommands = [];
 	private readonly HttpClient httpClient;
+	private readonly bool _ownsHttpClient;
 
-	public UpdateCommand ( DMainAppCore owner, string parentDsc = null )
+	public UpdateCommand ( DMainAppCore owner, string parentDsc = null, HttpClient httpClient = null )
 		: base ( owner, parentDsc, CommandNames, InterCommands ) {
-		httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds ( 5 ) };
+		_ownsHttpClient = httpClient == null;
+		this.httpClient = httpClient ?? new HttpClient { Timeout = TimeSpan.FromSeconds ( 5 ) };
 	}
 
+	/// <summary>Returns the local path where the downloaded ZIP file is saved. Override in tests to redirect to a temp path.</summary>
+	protected virtual string GetLocalZipPath () => Path.Combine ( AppContext.BaseDirectory, "IR.zip" );
+
 	protected override CommandResult ExecCleanup ( CommandProcessor<DMainAppCore>.CmdContext context ) {
-		httpClient.Dispose ();
+		if ( _ownsHttpClient ) httpClient.Dispose ();
 		return base.ExecCleanup ( context );
 	}
 
@@ -83,17 +98,6 @@ public class UpdateCommand : DCommand<DMainAppCore> {
 					fileManager.FileService = oldFS;
 					return null;
 				});
-				/*using var response = httpClient.GetAsync ( url + "/build_info.txt" ).GetAwaiter ().GetResult ();
-				response.EnsureSuccessStatusCode ();
-				using var stream = response.Content.ReadAsStreamAsync ().GetAwaiter ().GetResult ();
-				var oldFS = fileManager.FileService;
-				fileManager.FileService = streamFileService;
-				streamFileService.RegisterInputStream ( "content", stream );
-				if (!ParseBuildInfo ( fileManager, "content", pass, "server-side", out LastKnownBuildInfo, out errorResult )) {
-					fileManager.FileService = oldFS;
-					httpClient.Dispose ();
-					return errorResult;
-				}*/
 			}
 			catch ( Exception ex ) {
 				return new ($"Failed to download server-side build info: {ex.Message}");
@@ -113,28 +117,32 @@ public class UpdateCommand : DCommand<DMainAppCore> {
 		// == Download the appropriate ZIP ==
 		bool downloadBundled = context.Args.Present ( "--bundled" );
 		url += downloadBundled ? "/IR_Bundled.zip" : "/IR_Targeted.zip";
-		string localPath = Path.Combine ( AppContext.BaseDirectory, "IR.zip" );
+		string localPath = GetLocalZipPath ();
 		if ( !DownloadFile ( downloadBundled ? "bundled" : "targeted", fileManager, httpClient, url, localPath, downloadBundled ? LastKnownBuildInfo.BundleHash : LastKnownBuildInfo.TargetHash, out errorResult ) ) {
 			return errorResult;
 		}
 
 		// == Extract if --apply is present ==
 		if ( context.Args.Present ( "--apply" ) ) {
+			var tmpDir = Directory.CreateTempSubdirectory ( "InputResenderExtracted" );
+			string tmpPath = Path.Combine ( tmpDir.FullName, "IR.zip" );
 			string backupPath = Path.Combine ( AppContext.BaseDirectory, "IR_Backup_" + DateTime.Now.ToString ( "yyyyMMdd_HHmmss" ) + ".zip" );
-			ZipFile.CreateFromDirectory ( AppContext.BaseDirectory, backupPath, CompressionLevel.SmallestSize, false );
+			// Backup must be created into a different directory (Temp is the neutral best choice)
+			//   because otherwise the ZIP would try to compress itself (no recursion, just a locked file ;)
+			ZipFile.CreateFromDirectory ( AppContext.BaseDirectory, tmpPath, CompressionLevel.SmallestSize, true );
+			File.Move ( tmpPath, backupPath, true );
 
-			var extractedDir = Directory.CreateTempSubdirectory ( "InputResenderExtracted" );
-			ZipFile.ExtractToDirectory ( localPath, extractedDir.FullName );
+			ZipFile.ExtractToDirectory ( localPath, tmpDir.FullName );
 			File.Delete ( localPath );
 
 			if ( !context.Args.Present ( "--config" ) ) {
-				string configPath = Path.Combine ( extractedDir.FullName, "config.xml" );
+				string configPath = Path.Combine ( tmpDir.FullName, "config.xml" );
 				if ( File.Exists ( configPath ) ) { File.Delete ( configPath ); }
 			}
 
-			var allFiles = Directory.GetFiles ( extractedDir.FullName, "*", SearchOption.AllDirectories );
+			var allFiles = Directory.GetFiles ( tmpDir.FullName, "*", SearchOption.AllDirectories );
 			foreach ( var file in allFiles ) {
-				var relativePath = Path.GetRelativePath ( extractedDir.FullName, file );
+				var relativePath = Path.GetRelativePath ( tmpDir.FullName, file );
 				var targetPath = Path.Combine ( AppContext.BaseDirectory, relativePath );
 				Directory.CreateDirectory ( Path.GetDirectoryName ( targetPath ) );
 				File.Copy ( file, targetPath, true );
@@ -144,44 +152,6 @@ public class UpdateCommand : DCommand<DMainAppCore> {
 		} else {
 			return new ($"Update downloaded successfully. Use --apply to extract and apply the update.");
 		}
-
-
-
-
-		/*
-		var oldFS = fileManager.FileService;
-		fileManager.FileService = streamFileService;
-		streamFileService.RegisterInputStream ( "content", stream );
-		string downloadedContent = fileManager.ReadFileWithHeader ( "content", pass );
-		string downloadedHash = Convert.ToHexString ( SHA256.HashData ( Encoding.UTF8.GetBytes ( downloadedContent )
-			)
-		);
-
-		if ( downloadedHash != LastKnownBuildInfo.BundleHash && downloadedHash != LastKnownBuildInfo.TargetHash ) {
-			fileManager.FileService = oldFS;
-			httpClient.Dispose ();
-			return new (
-				$"Downloaded build hash does not match expected hashes. Downloaded: {downloadedHash}, Expected: {LastKnownBuildInfo.BundleHash} or {LastKnownBuildInfo.TargetHash}"
-			);
-		}
-
-		if ( context.Args.Present ( "--apply" ) ) {
-			string tempZipPath = Path.Combine ( Path.GetTempPath (), "InputResender_Update.zip" );
-			File.WriteAllText ( tempZipPath, downloadedContent );
-			ZipFile.ExtractToDirectory ( tempZipPath, AppContext.BaseDirectory, true );
-			File.Delete ( tempZipPath );
-
-			if ( !context.Args.Present ( "--config" ) ) {
-				string configPath = Path.Combine ( AppContext.BaseDirectory, "config.xml" );
-				if ( File.Exists ( configPath ) ) { File.Delete ( configPath ); }
-			}
-
-			httpClient.Dispose ();
-			return new ($"Update applied successfully. Restart the application to use the new version.");
-		} else {
-			httpClient.Dispose ();
-			return new ($"Update downloaded successfully. Use --apply to extract and apply the update.");
-		}*/
 	}
 
 	private static ErrorCommandResult ProcessHttp ( HttpClient httpClient, string path, Func<Stream, ErrorCommandResult> action ) {
@@ -195,18 +165,45 @@ public class UpdateCommand : DCommand<DMainAppCore> {
 		}
 	}
 
-	private static bool DownloadFile (string mark, DFileManager fileManager, HttpClient httpClient, string url, string localPath, string expectedHash, out ErrorCommandResult errorResult) {
-		errorResult = ProcessHttp ( httpClient, url, ( stream ) => SaveStreamAsFile ( stream, localPath ) );
+	/// <summary>Saves the HTTP response stream to the local path. Override in tests to store into an in-memory mock instead of the real filesystem.</summary>
+	protected virtual ErrorCommandResult SaveZipToLocal ( Stream stream, string localPath )
+		=> SaveStreamAsFile ( stream, localPath );
+
+	private bool DownloadFile (string mark, DFileManager fileManager, HttpClient httpClient, string url, string localPath, string expectedHash, out ErrorCommandResult errorResult) {
+		errorResult = ProcessHttp ( httpClient, url, ( stream ) => SaveZipToLocal ( stream, localPath ) );
 		if (errorResult != null) return false;
 
 		// == Verify the downloaded ZIP ==
-		fileManager.WhitelistHash ( localPath, expectedHash );
+		try { fileManager.WhitelistHash ( localPath, expectedHash ); }
+		catch ( ArgumentException e ) {
+			if (e.Message.Contains ( "already whitelisted" )) {
+				fileManager.WhitelistHash ( localPath, null );
+				fileManager.WhitelistHash ( localPath, expectedHash );
+			} else {
+				errorResult = new (new ($"Failed to whitelist {mark} build info: {e.Message}"), e);
+				return false;
+			}
+		}
 		try {
 			fileManager.ReadBinary ( localPath );
 			return true;
 		}
 		catch ( DFileManager.IntegrityException intEx ) {
-			errorResult = new (new ($"Integrity check failed for {mark} build info: {intEx.Message}"), intEx);
+			string msg = $"Integrity check failed for {mark} build info: {intEx.Message}";
+#if DEBUG
+			if ( intEx.GetType().Name == "HashIntegrityException" ) {
+				var hashInfoProp = intEx.GetType().GetProperty("HashInfo");
+				if ( hashInfoProp != null ) {
+					var hashInfo = hashInfoProp.GetValue(intEx);
+					var getDebugInfoMethod = hashInfo?.GetType().GetMethod("GetDebugInfo");
+					if ( getDebugInfoMethod != null ) {
+						string debugInfo = getDebugInfoMethod.Invoke(hashInfo, null) as string;
+						msg += "\n\nDEBUG - Detailed Hash Information:\n" + debugInfo;
+					}
+				}
+			}
+#endif
+			errorResult = new (new (msg), intEx);
 			return false;
 		}
 		catch ( Exception ex ) {
@@ -255,7 +252,21 @@ public class UpdateCommand : DCommand<DMainAppCore> {
 			return true;
 		}
 		catch ( DFileManager.IntegrityException intEx ) {
-			errorResult = new (new ($"Integrity check failed for {marker} build info: {intEx.Message}"), intEx);
+			string msg = $"Integrity check failed for {marker} build info: {intEx.Message}";
+#if DEBUG
+			if ( intEx.GetType().Name == "HashIntegrityException" ) {
+				var hashInfoProp = intEx.GetType().GetProperty("HashInfo");
+				if ( hashInfoProp != null ) {
+					var hashInfo = hashInfoProp.GetValue(intEx);
+					var getDebugInfoMethod = hashInfo?.GetType().GetMethod("GetDebugInfo");
+					if ( getDebugInfoMethod != null ) {
+						string debugInfo = getDebugInfoMethod.Invoke(hashInfo, null) as string;
+						msg += "\n\nDEBUG - Detailed Hash Information:\n" + debugInfo;
+					}
+				}
+			}
+#endif
+			errorResult = new (new (msg), intEx);
 			return false;
 		}
 		catch ( Exception ex ) {

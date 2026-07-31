@@ -31,7 +31,8 @@ public class PasswordHolder {
 	public byte[] Mask ( byte[] plainData ) {
 		byte[] result = new byte[plainData.Length];
 		int N = pass.Length;
-		for ( int i = 0; i < pass.Length; i++ ) result[i] = (byte)(plainData[i] ^ pass.Span[i % N] ^ iv.Span[i % N]);
+		int count = Math.Min ( N, plainData.Length );
+		for ( int i = 0; i < count; i++ ) result[i] = (byte)(plainData[i] ^ pass.Span[i % N] ^ iv.Span[i % N]);
 		return result;
 	}
 }
