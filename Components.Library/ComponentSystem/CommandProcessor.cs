@@ -8,6 +8,8 @@ public class CommandProcessor<CoreT> : ComponentBase<CoreT>, IDisposable where C
 	private readonly HashSet<DCommand<CoreT>> registeredCmds = new ();
 	private Action<string> WriteLine;
 	private Dictionary<string, object> Vars = new ();
+	private string Focused = null;
+	private bool EncloseInput = false;
 
 	// Have highest loglevel by default so that it shows enough info when error in command to set different error loglevel. To have something lower, use config init commands.
 	public ArgParser.ErrLvl ArgErrorLevel = ArgParser.ErrLvl.Full;
@@ -117,6 +119,38 @@ public class CommandProcessor<CoreT> : ComponentBase<CoreT>, IDisposable where C
 		return new CommandResult ( SB.ToString () );
 	}
 
+	private CommandResult HandleAddToFocus ( string focusContent ) {
+		bool shouldEnclose = focusContent.StartsWith ( '|' );
+		string contentToAdd = shouldEnclose ? focusContent[1..] : focusContent;
+
+		Focused = (Focused ?? "") + contentToAdd + ' ';
+		EncloseInput = shouldEnclose;
+
+		string enclosureStatus = EncloseInput ? "enclosed" : "not enclosed";
+		return new ( $"Focused to '{Focused}', {enclosureStatus}.", false );
+	}
+
+	private CommandResult HandleExitFocus ( string replacementFocus ) {
+		if ( replacementFocus == null ) {
+			Focused = null;
+			EncloseInput = false;
+			return new ( "Focus cleared.", false );
+		}
+
+		bool shouldEnclose = replacementFocus.StartsWith ( '|' );
+		Focused = (shouldEnclose ? replacementFocus[1..] : replacementFocus) + ' ';
+		EncloseInput = shouldEnclose;
+
+		string enclosureStatus = EncloseInput ? "enclosed" : "not enclosed";
+		return new ( $"Focus set to '{Focused}', {enclosureStatus}.", false );
+	}
+
+	private string ApplyFocusToLine ( string line ) {
+		if ( EncloseInput ) line = '(' + line + ')';
+		if ( Focused != null ) line = Focused + line;
+		return line;
+	}
+
 	/// <summary>Processes a line and returns the result. If it's of expected type, output reference is also set to the same result, now with proper type. Retuned and outputed references will be the same only if the result is of expected type.</summary>
 	public CommandResult ProcessLine<T> ( string line, out T result, bool verbose = false, ConsoleManager console = null ) where T : CommandResult {
 		result = null;
@@ -124,14 +158,18 @@ public class CommandProcessor<CoreT> : ComponentBase<CoreT>, IDisposable where C
 
 		if ( tmpRes == null ) return new ErrorCommandResult ( null, new Exception ( "No result." ) );
 		if ( tmpRes is not T tResult ) return new ErrorCommandResult ( tmpRes,
-			new Exception ( $"Expected result of type {typeof ( T ).Name}, got {result.GetType ().Name}." ) );
+			new Exception ( $"Expected result of type {typeof ( T ).Name}, got {tmpRes.GetType ().Name}." ) );
 		else return result = tResult;
 	}
 
 	public CommandResult ProcessLine ( string line, bool verbose = false, ConsoleManager console = null ) {
 		if ( verbose ) WriteLine ( $"Processing line: '{line}'" );
+		if ( line.StartsWith ( '>' ) ) return HandleAddToFocus ( line[1..] );
+		if ( line.StartsWith ( "<<" ) ) return HandleExitFocus ( line.Length > 2 ? line[2..] : null );
+		line = ApplyFocusToLine ( line );
+
 		ArgParser args = new ( line, WriteLine, ArgErrorLevel );
-		if ( args.ArgC == 0 ) return new CommandResult ( string.Empty, false );
+		if ( args.ArgC == 0 ) return new ( string.Empty, false );
 
 		if (args.String (0, null) == "core" && args.String(1, null) == "own") {
 			var core = GetVar<CoreBase> ( CoreManagerCommand<CoreBase>.ActiveCoreVarName );
