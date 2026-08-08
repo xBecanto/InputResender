@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <Nullable>disable</Nullable>
+    <UseWindowsForms>true</UseWindowsForms>
+    <StartupObject>InputResender.Windows.Program</StartupObject>
+    <TargetFramework>net9.0-windows10.0.19041.0</TargetFramework>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\InputResender.CLI\InputResender.CLI.csproj" />
+  </ItemGroup>
+</Project>

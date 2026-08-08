@@ -1,0 +1,12 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <TargetFramework>net9.0</TargetFramework>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\MdxLibs\SeClav\SeClav.csproj" />
+    <ProjectReference Include="..\InputResender.Variants\InputResender.Variants.csproj" />
+    <ProjectReference Include="..\InputResender.WebUI\InputResender.WebUI.csproj" />
+  </ItemGroup>
+</Project>

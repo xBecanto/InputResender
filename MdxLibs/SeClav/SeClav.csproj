@@ -1,0 +1,15 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net9.0</TargetFramework>
+        <ImplicitUsings>disable</ImplicitUsings>
+        <Nullable>disable</Nullable>
+    </PropertyGroup>
+    <ItemGroup>
+      <ProjectReference Include="..\MdxLibs.Core\MdxLibs.Core.csproj" />
+      <ProjectReference Include="..\MdxLibs.Definitions\MdxLibs.Definitions.csproj" />
+      <ProjectReference Include="..\MdxLibs.Services\MdxLibs.Services.csproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <InternalsVisibleTo Include="SeClavTests" />
+    </ItemGroup>
+</Project>

@@ -1,0 +1,12 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <Nullable>disable</Nullable>
+        <ImplicitUsings>disable</ImplicitUsings>
+        <TargetFramework>net9.0</TargetFramework>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\..\MdxLibs\MdxLibs.Variants\MdxLibs.Variants.csproj" />
+        <ProjectReference Include="..\..\MdxLibs\SeClav\SeClav.csproj" />
+        <ProjectReference Include="..\InputResender.Definitions\InputResender.Definitions.csproj" />
+    </ItemGroup>
+</Project>

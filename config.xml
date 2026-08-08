@@ -1,4 +1,4 @@
-0vf3B/lH7JI+r2TknLIpPPIvFPepBjLwmEvsc0VokwE=
+E8CW5pdSOpW6ZuPCdqHneBOBx0WPcglzAEiTiAwsTzI=
 <Config>
   <AutostartName>initCmds</AutostartName>
   <PrintAutoCommands>T</PrintAutoCommands>
@@ -13,8 +13,21 @@
       <C4>core migrate act own skipSame</C4>
       <C5>core destroy</C5>
       <C6>core activate</C6>
-      <C8>loglevel all</C8>
+      <C7>loglevel all</C7>
     </initCmds>
+    <scl>
+      <R00>load sclModules</R00>
+      <R01>scli reload</R01>
+      <R02>scli safemode off</R02>
+      <R03>scli write (@using BasicModule)</R03>
+      <R04>scli write (String msg)</R04>
+      <R05>scli write (msg = "Hello World!")</R05>
+      <R06>scli write (Int num = 42)</R06>
+      <R07>scli write (num = ADD_INT num 25)</R07>
+      <R08>scli write (msg = APPEND_INT_TO_STR msg num)</R08>
+      <R09>scli read num</R09>
+      <R10>scli read msg</R10>
+    </scl>
     <printWinKey>
       <W0>windows load --force</W0>
       <W1>windows msgs start</W1>

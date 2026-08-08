@@ -1,0 +1,37 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>InputResender</title>
+    <link rel="stylesheet" href="style.css">
+    <script>
+        async function SelectPage(name) {
+            try {
+                const module = await import("/"+name+".js");
+                const card = document.getElementById("Card");
+                card.innerHTML = "";
+                module.HTML(card);
+            }
+            catch (err) {
+                console.error("Failed to load list:", err);
+            }
+        } 
+        
+        SelectPage("AutoCmdView")
+    </script>
+</head>
+<body>
+    <div id="Body">
+        <h1>Input Resender - Controls</h1>
+        <div id="Menu">
+            <button id="AutoCmdView" onclick="SelectPage('AutoCmdView')">AutoCommands</button>
+            <button id="placeholderBtn1">Lorem</button>
+            <button id="placeholderBtn2">Ipsum</button>
+        </div>
+        <div id="Card">
+            <input type="text" id="BodyText" name="Body" placeholder="Type here...">
+            <button id="placeholderBtn3">Lorem</button>
+        </div>
+    </div>
+</body>
+</html>

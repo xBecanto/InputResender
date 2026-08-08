@@ -1,0 +1,182 @@
+﻿@page "/dynamic/{ComponentName}"
+
+@using InputResender.WebUI.Visualizers
+@using MdxLibs.Core
+@rendermode InteractiveServer
+
+<h3>@Component.ComponentName</h3>
+<label>@Component.ComponentID</label>
+
+
+@foreach (var (paramName, param) in Visualizers)
+{
+	<div class=@GetLineClass() @onclick="Update">
+		<label>@param.Label: </label>
+		@switch ( param ) {
+		case TextField { IsReadonly: true } textField:
+			<input type="text" readonly @bind="textField.Value"/>
+			break;
+		case TextField textField:
+			<input type="text" @bind="textField.Value" @oninput="textField.Apply"/>
+			break;
+		case ListView listView: {
+			if (listView.Items == null) {
+				<p>Loading...</p>
+				break;
+			}
+			<ul @onload="listView.UpdateValue">
+				@foreach ( string line in listView.Items ) {
+					<li>@line</li>
+				}
+			</ul>
+			break;
+		}
+		case NumberField<int> numInt:
+			<label> : @numInt.Number</label>
+			break;
+		case DropDownList dropDown:
+			<select title="@dropDown.LastError" @onchange="dropDown.Apply">
+			@if(dropDown.Lines.Count == 0) {
+				<option>-- No values --</option>
+			} else for ( int i = 0; i < dropDown.Lines.Count; i++ ) {
+				<option value="@i" @onselectionchange="dropDown.Apply">@dropDown.Lines[i]</option>
+			}
+			</select>
+			break;
+		case Separator separator:
+			var render = separator.Render ();
+			@render
+			break;
+		case ActionButton actionBtn:
+			<button @onclick="actionBtn.Click">@actionBtn.Label</button>
+			break;
+		default:
+			<p>Unknown value type of '@param.GetType ()'</p>
+			break;
+			}
+	</div>
+}
+
+@code {
+	[CascadingParameter(Name = "EnviHolder")]
+	private EnvironmentHolder EnvHolder { get; set; }
+	[Parameter]
+	public string ComponentName { get; set; }
+	int LineIndex = 0;
+
+	private ComponentUIParametersInfo Component, LastComponent = null;
+	private readonly Dictionary<string, IBlazorVisualizer> Visualizers = [];
+
+	protected override void OnParametersSet () { Init (); }
+	protected override void OnInitialized () { Init (); }
+
+	private string GetLineClass () {
+		LineIndex++;
+		return $"form-group-{LineIndex % 2}";
+	}
+
+	private void Init () {
+		lock (Visualizers) {
+			LineIndex = 0;
+			if ( !EnvHolder.ComponentUIs.TryGetValue ( ComponentName, out Component ) ) return;
+			if ( Component == LastComponent ) return;
+			LastComponent = Component;
+
+			Visualizers.Clear ();
+			foreach ( var uiParam in Component.Parameters ) {
+				switch ( uiParam ) {
+				case UI_TextField textField:    Visualizers.Add ( uiParam.Name, new TextField ( textField ) ); break;
+				case UI_ListView listView:      Visualizers.Add ( uiParam.Name, new ListView ( listView ) ); break;
+				case UI_IntField intField:      Visualizers.Add ( uiParam.Name, new NumberField<int> ( intField ) ); break;
+				case UI_DropDown dropDown:      Visualizers.Add ( uiParam.Name, new DropDownList ( dropDown ) ); break;
+				case UI_ActionButton actionBtn: Visualizers.Add ( uiParam.Name, new ActionButton ( actionBtn ) ); break;
+				case UI_Separator separator:    Visualizers.Add ( uiParam.Name, new Separator ( separator ) ); break;
+				default:
+					EnvHolder.PushFooterMsg ( $"Unsupported parameter type '{uiParam.Type}' for parameter '{uiParam.Name}' in component '{Component.ComponentName}'" );
+					continue;
+				}
+			}
+
+			foreach ( var vis in Visualizers ) { vis.Value.OnValueChanged += () => InvokeAsync ( StateHasChanged ); }
+
+			RequestUpdate ();
+		}
+
+		EnvHolder.RedrawRequested += RequestUpdate;
+	}
+
+	private async Task Execute() {
+		//var result = await Component.ExecuteAsync(Parameters);
+		// Zobraz výsledky
+	}
+
+	public void RequestUpdate () => Update ().Wait ();
+	private async Task Update () {
+		System.DateTime now = System.DateTime.Now;
+		LineIndex = 0;
+		foreach ( var vis in Visualizers ) {
+			vis.Value.RequestUpdate ();
+		}
+		System.TimeSpan elapsed = System.DateTime.Now - now;
+		EnvHolder.PushFooterMsg ( $"Updated component '{Component.ComponentName}' in {elapsed.TotalMilliseconds:F2} ms" );
+		await InvokeAsync ( StateHasChanged );
+	}
+
+	/*
+. Supported commands:
+ . help - Show this help.
+ . info: Show info.
+ . print <Text>: Print text.
+ . clear: Clear screen.
+ . exit: Exit program.
+ . safemode <on|off>: Enable or disable safe mode.
+ . loadall: Load all commands.
+ . argParse <line>: Print how line was parsed.
+ . loglevel <level>: Set log level.
+ . argerrorlvl <level>: Set error reporting level.
+ .  load-cmd-generalCmds
+ .  load-cmd-inputCmds
+ .  load-cmd-TopLevel
+ . core (act|typeof|list): Offers access to Core functionalities
+ .  + core new[.|create] (comp): Creates a new Core instance.
+ . conns (list|send|close|callback|force): Connection manager.
+ . context (set|get|reset|add): Context variable access commands.
+ . debug (throw): Debugging commands
+ . pwd (set): Command for Working Directory management
+ . auto[.|autocmd|autocmds] (list|run|load)
+ .  - Manage automatic commands that run on specific events
+ . load (sclModules|joiners)
+ .  - Loads various components, commands, data or configurations.
+ . Blazor[.|blazor] (start|stop): Command to manage the Blazor server.
+ . network: Manages network connections.
+ .  + network hostlist: Lists available local hosts.
+ .  + network conn (list|send): Manages network connections.
+ .  + network callback (list|recv|newconn): Manages network callbacks.
+ .  + network info: Gets information about a specific endpoint.
+ . password[.|pw] (add|print): Password management
+ . target[.|tEP] (set): Target management
+ . hookcb (list|set|active): Input hook callback selector
+ . pipeline (list|delete|new|expand): Control the Pipeline system
+ . sim (mousemove|keydown|keyup|keypress): Can simulate user hardware input
+ . hook (manager|add|remove|list|debug): Input hook manager.
+ .  + hook inpll (list): Low level hook (Win) access.
+ . SIP (status|force|assign): Command to access scripted-based input processor.
+ . seclav (module|list|parse|run): Parse and run SeClav scripts.
+ . gui 0 (start|stop): Manages the GUI.
+ . visualizer 0 (start|stop|update|status): Manages visualizer of active core
+ . windows (load|msgs): Offers access to Windows specific functionalities
+
+$> core list
+ Result:
+ . Core 'Alfa' has following components:
+ .
+ . (-9R) : DEventVector (MEventVector, (B), 0)                  | (-QdT) : DLowLevelInput (MLowLevelInput, (B), 0)
+ . (-W0HV) : ComponentBase`1 (CInputLLParser, (B), 0)           | (-66d#W) : DInputReader (VInputReader_KeyboardHook, (B), 0)
+ . (-cJX3P) : DInputMerger (VInputMerger, (B), 0)               | (-WAcSw) : DInputProcessor (VInputProcessor, (B), 0)
+ . (-8MG9T) : DDataSigner (VDataSigner, (B), 0)                 | (oUSeY) : DInputResenderControls (VInputResenderControls, (B), 0)
+ . (-7#X+9) : DShortcutWorker (VShortcutWorker, (B), 0)         | ($1DQZB) : DCommandWorker (VCommandWorker, (B), 0)
+ . (x+kv4) : DComponentJoiner (VComponentJoiner, (B), 0)        | (6dbHOB) : DInputSimulator (VInputSimulator, (B), 0)
+ . (-rLS3T) : CommandProcessor (CommandProcessor, (B), 0)       | (EtQ1e) : DPacketSender (VPacketSender, (B), 0)
+ . (XoqHi) : DLogger (VLogger, (B), 0)
+	 */
+}
