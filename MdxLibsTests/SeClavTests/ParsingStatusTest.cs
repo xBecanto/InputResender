@@ -59,11 +59,21 @@ public class ParsingStatusTest {
 			.And.Message.Should ().Contain ( "already registered" );
 	}
 
+	/*private static void AssertUniqueCmd<CmdT> (SCLParsingStatus status, string cmdCode) where CmdT : ICommand {
+		var cmds = status.TryGetCommands ( cmdCode );
+		cmds.Should ().NotBeNull ().And.HaveCount ( 1 );
+		var cmd = cmds.First ();
+		cmd.Should ().NotBeNull ().And.BeOfType<CmdT> ();
+		cmd.CmdCode.Should ().Be ( cmdCode );
+	}*/
+
 	[Fact]
 	public void TryGetCommand () {
 		var debugInfo = Init ();
 		const string CMD = "ADD_INT";
-		var cmd = status.TryGetCommand ( CMD );
+		var cmds = status.TryGetCommands ( CMD );
+		cmds.Should ().NotBeNull ().And.HaveCount ( 1 );
+		var cmd = cmds.First ();
 		cmd.Should ().NotBeNull ().And.BeOfType<AddInts> ();
 		cmd.CmdCode.Should ().Be ( CMD );
 	}
@@ -72,15 +82,17 @@ public class ParsingStatusTest {
 	public void TryGetInvalidCommandReturnsNull () {
 		var debugInfo = Init ();
 		const string CMD = "NON_EXISTENT_CMD";
-		var cmd = status.TryGetCommand ( CMD );
-		cmd.Should ().BeNull ();
+		var cmds = status.TryGetCommands ( CMD );
+		cmds.Should ().NotBeNull ().And.BeEmpty ();
 	}
 
 	[Fact]
 	public void GetCommandID () {
 		var origDebuginfo = Init ();
 		const string CMD = "ADD_INT";
-		var cmd = status.TryGetCommand ( CMD );
+		var cmds = status.TryGetCommands ( CMD );
+		cmds.Should ().NotBeNull ().And.HaveCount ( 1 );
+		var cmd = cmds.First ();
 		int cmdID = status.GetCommandID ( cmd );
 		var debugInfo = new SCLParsingStatus.SCLDebugInfo ( status ); // Refresh
 		cmdID.Should ().BeInRange ( 0, debugInfo.Script.Commands.Count - 1 );
@@ -263,8 +275,10 @@ public class ParsingStatusTest {
 	public void PushCommand () {
 		var debugInfo = Init ();
 		const string CMD = "ADD_INT";
-		var cmd = status.TryGetCommand ( CMD );
-		
+		var cmds = status.TryGetCommands ( CMD );
+		cmds.Should ().NotBeNull ().And.HaveCount ( 1 );
+		var cmd = cmds.First ();
+
 		SId<OpCodeTag> cmdID = new ( 0, status.GetCommandID ( cmd ) );
 
 		// Due to strict parsing checks, pushing command requires valid arguments. This is currently to easier (sooner) catch errors.

@@ -130,15 +130,17 @@ internal class SCLParsingStatus {
 	readonly List<IDataType> constants = [];
 	readonly List<IDataType> results = []; // FIXME: This should only be <int> as we don't yet know the value, only the data type
 	readonly Dictionary<int, Func<IDataType>> getters = [];
+	private readonly Dictionary<string, HashSet<string>> alts = [];
 	public Dictionary<string, SIdVal> inputVars = [];
 	public Dictionary<string, int> inputSamplers = [];
 	public Dictionary<string, SIdVal> outputVars = [];
 	public Dictionary<string, int> externFunctions = [];
+	public HashSet<string> PossibleCommands = [];
 	public bool ReplaceNonexistingJumpsWithNOPs = false;
 	//readonly List<Action<SCLParsedScript>> OnLoad = [];
 
 	readonly Dictionary<string, DataTypeDefinition> dataTypeMap = [];
-	readonly Dictionary<string, ICommand> commandMap = [];
+	readonly Dictionary<string, HashSet<ICommand>> commandMap = [];
 	readonly Dictionary<string, IMacro> macros = [];
 	readonly Dictionary<string, PraeDirective> praeDirectives = [];
 
@@ -160,15 +162,21 @@ internal class SCLParsingStatus {
 		results.Add ( new SCLT_Void.VoidData ( dataTypes[0] as SCLT_Void ) );
 	}
 
+	private void PushCmd ( string name, ICommand cmd ) {
+		PossibleCommands.Add ( name );
+		if ( commandMap.TryGetValue ( name, out var existing ) ) {
+			if ( !existing.Add ( cmd ) )
+				throw new SCLDuplicateDefinitionException ( $"Command '{cmd.CmdCode}' is already defined." );
+		} else commandMap[name] = [cmd];
+	}
+
 	public void RegisterModule ( IModuleInfo module ) {
 		ArgumentNullException.ThrowIfNull ( module );
 		if ( modules.Any ( m => m.Name == module.Name ) )
 			throw new SCLDuplicateDefinitionException ( $"Module '{module.Name}' is already registered." );
 		modules.Add ( module );
 		foreach ( var cmd in module.Commands ) {
-			if ( commandMap.ContainsKey ( cmd.CmdCode ) )
-				throw new SCLDuplicateDefinitionException ( $"Command '{cmd.CmdCode}' is already defined." );
-			commandMap[cmd.CmdCode] = cmd;
+			PushCmd ( cmd.CmdCode, cmd );
 		}
 		foreach ( var dt in module.DataTypes ) {
 			if ( dataTypeMap.ContainsKey ( dt.Name ) )
@@ -184,6 +192,13 @@ internal class SCLParsingStatus {
 			if ( praeDirectives.ContainsKey ( prae.Key ) )
 				throw new SCLDuplicateDefinitionException ( $"Prae directive '{prae.Key}' is already defined." );
 			praeDirectives[prae.Key] = prae.Value;
+		}
+
+		foreach ( var altNames in module.AltNames ) {
+			PossibleCommands.Add ( altNames.Key );
+			if ( alts.TryGetValue ( altNames.Key, out var existing ) ) {
+				foreach ( var alt in altNames.Value ) existing.Add ( alt );
+			} else alts[altNames.Key] = [..altNames.Value];
 		}
 	}
 
@@ -217,7 +232,7 @@ internal class SCLParsingStatus {
 		if ( commands.Any ( c => c.CmdCode == cmd.CmdCode ) )
 			throw new SCLDuplicateDefinitionException ( $"Command '{cmd.CmdCode}' is already registered." );
 		commands.Add ( cmd );
-		commandMap.Add ( cmd.CmdCode, cmd );
+		PushCmd ( cmd.CmdCode, cmd );
 		return SCLInterpreter.CrOpCode ( commands.Count - 1 );
 	}
 
@@ -241,13 +256,25 @@ internal class SCLParsingStatus {
 		return macro;
 	}
 
-	public ICommand TryGetCommand ( string cmd ) {
+	[return: System.Diagnostics.CodeAnalysis.NotNull()]
+	public HashSet<ICommand> TryGetCommands ( string cmd ) {
 		ArgumentNullException.ThrowIfNull ( cmd );
-		if ( !commandMap.TryGetValue ( cmd, out ICommand command ) ) return null;
-		if ( commands.Contains ( command ) ) return command;
+		var ret = !commandMap.TryGetValue ( cmd, out HashSet<ICommand> command ) ? [] : command;
+		if ( !alts.TryGetValue ( cmd, out HashSet<string> altNames ) ) return ret;
 
-		commands.Add ( command );
-		return command;
+		foreach ( var alt in altNames ) {
+			if ( commandMap.TryGetValue ( alt, out HashSet<ICommand> altCommands ) )
+				ret.UnionWith ( altCommands );
+		}
+		return ret;
+	}
+	public void ConfirmCommand ( ICommand cmd ) {
+		ArgumentNullException.ThrowIfNull ( cmd );
+		if ( !commands.Contains ( cmd ) ) {
+			if ( !commandMap.ContainsKey ( cmd.CmdCode ) )
+				throw new SCLParsingException ( $"Command '{cmd.CmdCode}' ({cmd.CommonName}) is not registered nor present in any loaded module." );
+			commands.Add ( cmd );
+		}
 	}
 
 	public int GetCommandID ( ICommand cmd ) {
@@ -326,7 +353,7 @@ internal class SCLParsingStatus {
 		TranslateDataType ( ref dataTypeOut );
 
 		ExternMapper sampler = new ( name, dataTypeIn, dataTypeOut );
-		commandMap[name] = sampler;
+		PushCmd ( name, sampler );
 		int cmdID = GetCommandID ( sampler );
 		inputSamplers[name] = cmdID;
 	}
@@ -340,7 +367,7 @@ internal class SCLParsingStatus {
 			TranslateDataType ( ref argTypes[i] );
 		}
 		ExternFunction function = new ( name, argTypes, returnType );
-		commandMap[name] = function;
+		PushCmd ( name, function );
 		int cmdID = GetCommandID ( function );
 		externFunctions[name] = cmdID;
 	}

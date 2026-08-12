@@ -623,27 +623,59 @@ internal class SubCommandParser : SubParserBase {
 		result = null;
 		string originalLine = line;
 		ushort flagReq = ParsingContext.GetFlag ( ref line );
-		string token = context.GetIdentifier ( ref line );
+		string token = null; // = context.GetIdentifier ( ref line );
+		foreach ( var cmdStart in context.Status.PossibleCommands ) {
+			if ( !line.StartsWith ( cmdStart )
+				|| (line.Length != cmdStart.Length && !char.IsWhiteSpace ( line[cmdStart.Length] )) )
+				continue;
+
+			token = cmdStart;
+			line = line[cmdStart.Length..].TrimStart ();
+			break;
+		}
+		token ??= context.GetIdentifier ( ref line );
+
 		if ( string.IsNullOrEmpty ( token ) ) return false;
-		ICommand cmd = context.Status.TryGetCommand ( token );
-		if ( cmd == null ) return false;
-		result = new ( context, originalLine, token, cmd, flagReq );
+		HashSet<ICommand> cmdSet = context.Status.TryGetCommands ( token );
+		if ( cmdSet.Count == 0 ) return false;
+		List<(SubCommandParser, ICommand, string)> candidates = new ();
+		foreach ( ICommand cmd in cmdSet ) {
+			try {
+				result = new ( context, originalLine, token, cmd, flagReq );
+				string remLine = line;
 
-		if (cmd.Args.Count != cmd.ArgC)
-			throw new SCLParsingException ( $"Internal error: Command '{cmd.CmdCode}' argument count mismatch between ICommand definition and Args list.", originalLine );
-		for ( int i = 0; i < cmd.ArgC; i++ ) {
-			if ( cmd.Args[i].type is SCLT_Any ) {
-				result.args[i] = new CmdArgInfo ( SCLInterpreter.CrArgVar ( 1 ) ); // 'ANY' is requested. Corrently no better way to provide some 'placeholder' value.
-				line = string.Empty; // 'ANY' should probably consume the rest of the line.
-			} else {
-				var type = context.Status.GetDataType ( cmd, i );
+				if (cmd.Args.Count != cmd.ArgC)
+					throw new SCLParsingException ( $"Internal error: Command '{cmd.CmdCode}' argument count mismatch between ICommand definition and Args list.", originalLine );
+				for ( int i = 0; i < cmd.ArgC; i++ ) {
+					if ( cmd.Args[i].type is SCLT_Any ) {
+						result.args[i] = new CmdArgInfo ( SCLInterpreter.CrArgVar ( 1 ) ); // 'ANY' is requested. Corrently no better way to provide some 'placeholder' value.
+						remLine = string.Empty; // 'ANY' should probably consume the rest of the line.
+					} else {
+						var type = context.Status.GetDataType ( cmd, i );
 
-				result.args[i] = context.ParseArg ( ref line, context, type, $"Command '{result.Name}' expects argument {i + 1}" );
+						result.args[i] = context.ParseArg ( ref remLine, context, type, $"Command '{result.Name}' expects argument {i + 1}" );
+					}
+				}
+				candidates.Add ( (result, cmd, remLine) );
+			} catch ( Exception _) {
+				// Try next candidate
 			}
 		}
 
-		result.RemainLine = line;
-		return true;
+		for (int i = candidates.Count - 1; i >= 0; i--) {
+			if (candidates[i].Item3.Length > 0) candidates.RemoveAt(i);
+		}
+
+		switch ( candidates.Count ) {
+		case 0: throw new SCLCommandArgumentException ( $"Command '{token}' could not be matched with any of the available commands.", originalLine );
+		case > 1: throw new SCLCommandArgumentException ( $"Command '{token}' is ambiguous and matches multiple commands. Please specify the command more precisely.", originalLine );
+		default:
+			var (res, cmd, remLine) = candidates[0];
+			result = res;
+			result.RemainLine = remLine;
+			context.Status.ConfirmCommand ( result.Command );
+			return true;
+		}
 	}
 
 	public TDst TryRegisterResult () {

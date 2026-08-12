@@ -209,7 +209,7 @@ internal class AddInts : ICommand {
 	}
 }
 
-internal class ConcatStrs : ICommand {
+internal class ConcatStrs2 : ICommand {
 	public string CmdCode => "CONCAT_STR";
 	public string CommonName => "Concatenate Strings";
 	public string Description => "Concatenates two string values.";
@@ -235,6 +235,41 @@ internal class ConcatStrs : ICommand {
 			throw new InvalidOperationException ( $"Expected string for argument 'str2', got '{str2.Definition.Name}'." );
 		progress.Add ( $" . \"{str1}\" + \"{str2}\" -> \"{v1.Value + v2.Value}\"" );
 		return new TestValueString ( str1.Definition, v1.Value + v2.Value );
+	}
+}
+
+internal class ConcatStrs3 : ICommand {
+	public string CmdCode => "CONCAT_STR";
+	public string CommonName => "Concatenate Strings";
+	public string Description => "Concatenates three string values.";
+	public int ArgC => 3;
+	public IReadOnlyList<(string name, DataTypeDefinition type, string description)> Args => [
+		("str1", new TestValueStringDef (), "First string to concatenate"),
+		("str2", new TestValueStringDef (), "Second string to concatenate"),
+		("str3", new TestValueStringDef (), "Third string to concatenate"),
+	];
+	public DataTypeDefinition ReturnType => new TestValueStringDef ();
+	public IDataType Execute ( ISCLRuntime runtime, IReadOnlyList<SIdVal> args ) {
+		var str1 = runtime.GetVar ( args[0] ) as TestValueString;
+		var str2 = runtime.GetVar ( args[1] ) as TestValueString;
+		var str3 = runtime.GetVar ( args[2] ) as TestValueString;
+		return new TestValueString ( str1.Definition, str1.Value + str2.Value + str3.Value );
+	}
+	public IDataType ExecuteSafe ( ISCLRuntime runtime, IReadOnlyList<SIdVal> args, ref List<string> progress ) {
+		SIdVal str1ID = args[0];
+		SIdVal str2ID = args[1];
+		SIdVal str3ID = args[2];
+		IDataType str1 = runtime.SafeGetVar ( str1ID );
+		IDataType str2 = runtime.SafeGetVar ( str2ID );
+		IDataType str3 = runtime.SafeGetVar ( str3ID );
+		if ( str1 is not TestValueString v1 )
+			throw new InvalidOperationException ( $"Expected string for argument 'str1', got '{str1.Definition.Name}'." );
+		if ( str2 is not TestValueString v2 )
+			throw new InvalidOperationException ( $"Expected string for argument 'str2', got '{str2.Definition.Name}'." );
+		if ( str3 is not TestValueString v3 )
+			throw new InvalidOperationException ( $"Expected string for argument 'str3', got '{str3.Definition.Name}'." );
+		progress.Add ( $" . \"{str1}\" + \"{str2}\" + \"{str3}\" -> \"{v1.Value + v2.Value + v3.Value}\"" );
+		return new TestValueString ( str1.Definition, v1.Value + v2.Value + v3.Value );
 	}
 }
 
@@ -344,7 +379,7 @@ internal class JoinStrings : IMacro {
 	public string[] RewriteByGuiders ( ushort flags, (int guiderID, string arg)[] parts ) {
 		// Just a reminder, this is only a test method, doesn't need to be user-friendly command
 		// This specific macro would provide bad result for strings containing the separator inside i.e. '|'.
-		ConcatStrs concater = new ();
+		ConcatStrs2 concater = new ();
 		List<string> rewritten = [];
 		// Define target variable:
 		if ( parts.Length < 3 ) throw new InvalidOperationException ( "JOIN_STRINGS macro requires at least two string arguments to join." ); // Variable name + at least two strings
@@ -373,7 +408,7 @@ internal class AddOrAppend : IMacro {
 	public string[] RewriteByGuiders ( ushort flags, (int guiderID, string arg)[] parts ) {
 		if ( parts.Length < 3 )
 			throw new InvalidOperationException ( "ADD_OR_APPEND macro requires at least two arguments." );
-		ConcatStrs concater = new ();
+		ConcatStrs2 concater = new ();
 		AddInts adder = new ();
 		AppendIntToString appI2S = new ();
 		List<string> rewritten = [];
@@ -420,7 +455,7 @@ internal class SCL_TestModule : IModuleInfo {
 	private readonly DataTypeDefinition StrDef = new TestValueStringDef ();
 
 	public IReadOnlySet<ICommand> Commands => new HashSet<ICommand> () {
-		new AssertEqual (), new AddInts (), new ConcatStrs (), new AppendIntToString (),
+		new AssertEqual (), new AddInts (), new ConcatStrs2 (), new ConcatStrs3 (), new AppendIntToString (),
 		new SetFlag (), new ResetFlag (), new ReadFlags (), new CompareInt (),
 	};
 
@@ -434,4 +469,9 @@ internal class SCL_TestModule : IModuleInfo {
 
 	// Prae-directives are provided by tests themselves as needed
 	public IReadOnlyDictionary<string, PraeDirective> PraeDirectives => new Dictionary<string, PraeDirective> ();
+
+	public IReadOnlyDictionary<string, IReadOnlySet<string>> AltNames
+		=> new Dictionary<string, IReadOnlySet<string>> {
+			{ "+", new HashSet<string> { "ADD_INT", "CONCAT_STR", "APPEND_INT_TO_STR" } },
+		};
 }

@@ -141,6 +141,7 @@ public interface IModuleInfo {
 	IReadOnlySet<IMacro> Macros { get; }
 	IReadOnlySet<DataTypeDefinition> DataTypes { get; }
 	IReadOnlyDictionary<string, PraeDirective> PraeDirectives { get; }
+	IReadOnlyDictionary<string, IReadOnlySet<string>> AltNames { get; }
 }
 
 public interface ISCLRuntime {

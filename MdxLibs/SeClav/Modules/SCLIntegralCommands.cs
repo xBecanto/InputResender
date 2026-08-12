@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using SeClav.Parsing;
 
 namespace SeClav.Modules;
@@ -77,7 +78,7 @@ public class SCL_NOP : ICommand {
 
 
 	internal static CmdCall Create (SCLParsingStatus status) {
-		var nopOpCode = status.GetCommandID ( status.TryGetCommand ( SCL_NOP.CallName ) );
+		var nopOpCode = status.GetCommandID ( status.TryGetCommands ( SCL_NOP.CallName ).First () );
 		SId<OpCodeTag> cmdID = new ( 0, nopOpCode );
 		var dst = SCLInterpreter.CrDst ( 0 );
 		var arg = SCLInterpreter.CrArgRes ( 0 );

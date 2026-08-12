@@ -120,6 +120,42 @@ public class SCLIntegrationTests {
 	[Theory]
 	[InlineData ( true )]
 	[InlineData ( false )]
+	public void OverloadedCommandCorrectSelection ( bool safe ) {
+		const string CMD = "CONCAT_STR";
+		parser.ProcessLine ( "TestString myVar2 = " + CMD + " \"Hello\" \" World!\"" );
+		parser.ProcessLine ( "TestString myVar3 = " + CMD + " \"Hello\" \" World!\" \" How are you?\"" );
+		var assertionRuntime = RunScript ( safe );
+		var (_, Var2) = assertionRuntime.VarExists<TestValueStringDef, TestValueString> ( "myVar2" );
+		var (_, Var3) = assertionRuntime.VarExists<TestValueStringDef, TestValueString> ( "myVar3" );
+		Var2.Value.Should ().Be ( "Hello World!" );
+		Var3.Value.Should ().Be ( "Hello World! How are you?" );
+	}
+
+
+	private TVal TestAltNames<TDef, TVal> ( string typeName, string arg1, string arg2, string expected )
+		where TDef : DataTypeDefinition where TVal : IDataType {
+		parser.ProcessLine ( $"{typeName} myVar = + {arg1} {arg2}" );
+		var assertionRuntime = RunScript ( true );
+		var (_, Var) = assertionRuntime.VarExists<TDef, TVal> ( "myVar" );
+		return Var;
+	}
+
+	[Theory]
+	[InlineData ( "\"Hello,\"", "\" World!\"", "Hello, World!" )]
+	[InlineData ( "\"The answer is: \"", "42", "The answer is: 42" )]
+	public void AltNamesForCommands_Str ( string arg1, string arg2, string expected )
+		=> TestAltNames<TestValueStringDef, TestValueString> ( "TestString", arg1, arg2, expected )
+			.Value.Should ().Be ( expected );
+
+	[Theory]
+	[InlineData ( 40, 2, 42 )]
+	public void AltNamesForCommands_Int ( int arg1, int arg2, int expected )
+		=> TestAltNames<TestValueIntDef, TestValueInt> ( "TestInt", arg1.ToString (), arg2.ToString (), expected.ToString () )
+			.Value.Should ().Be ( expected );
+
+	[Theory]
+	[InlineData ( true )]
+	[InlineData ( false )]
 	public void PraeDirectiveIsCalled ( bool safe ) {
 		bool wasCalled = false;
 		parser.RegisterPraeDirective ( "test_prae", ( ctx, parser ) => { wasCalled = true; } );

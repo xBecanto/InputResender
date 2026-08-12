@@ -253,4 +253,6 @@ public class SCL_BasicModule : IModuleInfo {
 	// Prae-directives are provided by tests themselves as needed
 	public IReadOnlyDictionary<string, PraeDirective> PraeDirectives => new Dictionary<string, PraeDirective> () {
 	};
+
+	public IReadOnlyDictionary<string, IReadOnlySet<string>> AltNames => new Dictionary<string, IReadOnlySet<string>> { };
 }
