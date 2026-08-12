@@ -15,7 +15,7 @@ public class VTapperInputCommand : DCommand_IRCore {
 	private static List<string> CommandNames = ["tapper"];
 	private static List<(string, Type)> InterCommands = [
 		("status", null),
-		("force", null),
+		("add", null),
 		("wait", null),
 		("keys", null),
 		("mapping", null),
@@ -29,7 +29,7 @@ public class VTapperInputCommand : DCommand_IRCore {
 	protected override CommandResult ExecIner ( CmdContext context ) {
 		if ( TryPrintHelp ( context.Args, context.ArgID + 1, () => context.SubAction switch {
 			"status" => CallName + " status: Print current status of the TapperInput processor.",
-			"force" => CallName + " force <Key1> <Key2> <Key3> <Key4> <Key5> <Shift> <Switch>: Force assign VTapperInput as input processor.\n\tKey1: Trigger key for pinky finger\n\tKey2: Trigger key for ring finger\n\tKey3: Trigger key for middle finger\n\tKey4: Trigger key for index finger\n\tKey5: Trigger key for thumb\n\tShift: What key is used to mark shift event\n\tSwitch: What key is used to mark switch event",
+			"add" => CallName + " add [-s|--soft] [-f|--force] <Key1> <Key2> <Key3> <Key4> <Key5> <Shift> <Switch>: Add VTapperInput as input processor.\n\rsoft: If some InputProcessor is already registered, deactivate it instead of unregistering.\n\rforce: Force the new Tapper to be the only existing InputProcessor by removing any already existing ones.\n\tKey1: Trigger key for pinky finger\n\tKey2: Trigger key for ring finger\n\tKey3: Trigger key for middle finger\n\tKey4: Trigger key for index finger\n\tKey5: Trigger key for thumb\n\tShift: What key is used to mark shift event\n\tSwitch: What key is used to mark switch event",
 			"wait" => CallName + " wait <ms>: Set wait time between taps in milliseconds.\n\tms: Time in milliseconds",
 			"keys" => CallName + " keys <Key1> <Key2> <Key3> <Key4> <Key5> <Shift> <Switch>: Assign the trigger keys.\n\tKey1: Trigger key for pinky finger\n\tKey2: Trigger key for ring finger\n\tKey3: Trigger key for middle finger\n\tKey4: Trigger key for index finger\n\tKey5: Trigger key for thumb\n\tShift: What key is used to mark shift event\n\tSwitch: What key is used to mark switch event",
 			"condition" => CallName + " condition <Modifier>: Set modifier condition for triggering.\n\tModifier: Modifier key that must be held for trigger to activate." + EnumPar<ModE> ( "Modifier" ),
@@ -58,14 +58,26 @@ public class VTapperInputCommand : DCommand_IRCore {
 				$"  State: {tapper.PrintState ()}"
 			);
 		}
-		case "force": {
+		case "add": {
+			context.Args.RegisterSwitch ( 's', "soft" );
+			context.Args.RegisterSwitch ( 'f', "force" );
+
+			if ( context.Args.Present ( "--force" ) ) {
+				while (true) {
+					var existing = core.Fetch<DInputProcessor> ();
+					if ( existing == null ) break;
+					core.Unregister ( existing );
+				}
+			}
+
 			KeyCode[] keys = LoadKeys ( context, context.ArgID + 1 );
 
-			var existing = core.Fetch<DInputProcessor> ();
-			if ( existing != null ) {
-				if ( existing is VTapperInput )
+			var tapper = core.Fetch<DInputProcessor> ();
+			if ( tapper != null ) {
+				if ( tapper is VTapperInput )
 					return new ( "Input Processor is already VTapperInput." );
-				core.Unregister ( existing );
+
+				if ( context.Args.Present ( "--soft" ) ) tapper.PipelineEnabled = false;
 			}
 			new VTapperInput ( core, keys, ModE.None );
 			return new ( $"VTapperInput assigned with keys [{string.Join ( ", ", keys.Select ( k => k.ToString () ) )}]." );

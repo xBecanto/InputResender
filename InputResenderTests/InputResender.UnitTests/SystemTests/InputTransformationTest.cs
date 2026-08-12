@@ -22,7 +22,7 @@ public class InputTransformationTest : BaseSystemTest {
 		Test ( [
 				"fm whitelist SIPtest.scl 0MPd3FUbKTIEiiJTg/O21VDW4fhqeuoflPP9oP2gbLQ=",
 			"seclav parse SIPtest.scl",
-			"SIP force",
+			"SIP add --force",
 			"SIP assign SIPtest.scl",
 			"pipeline new InputProcess exact=SHookManager DInputMerger DInputProcessor",
 			"hook add delayed -c Pipeline Keydown KeyUp",
@@ -50,7 +50,7 @@ public class InputTransformationTest : BaseSystemTest {
 
 			@in SIP_Status_t sip_status
 			PRINT_SIP_STATUS sip_status""",
-			"SIP force",
+			"SIP add --force",
 			"SIP assign SIPtest.scl",
 			"pipeline new InputProcess exact=SHookManager DInputMerger DInputProcessor",
 			"hook add delayed -c Pipeline Keydown KeyUp",
@@ -83,7 +83,7 @@ public class InputTransformationTest : BaseSystemTest {
 			?> pressState = 1
 			FIRE_KEY sip_status keyName pressState
 			""",
-			"SIP force",
+			"SIP add --force",
 			"SIP assign SIPtest.scl",
 			"pipeline new InputProcess DInputReader DInputMerger DInputProcessor",
 			"hook add delayed -c Print Keydown KeyUp",
@@ -177,7 +177,7 @@ public class InputTransformationTest : BaseSystemTest {
 			SIP_3Tree --> 0					# −−---
 						"
 			""",
-			"SIP force",
+			"SIP add --force",
 			"SIP assign SipMorse.scl",
 			"pipeline new InputProcess exact=SHookManager DInputMerger DInputProcessor",
 			"hook add delayed -c Pipeline Keydown KeyUp",
@@ -232,7 +232,7 @@ COMPARE_KEYS_3 sip_status DotKey DashKey ConditionKey
 ?CA ConsumeEvent = 0
 ?CB ConsumeEvent = 1
 """,
-				"SIP force",
+				"SIP add --force",
 				"SIP assign SIPtest.scl",
 				"SIP safemode off",
 				"pipeline new InputProcess exact=SHookManager DInputMerger DInputProcessor origin",

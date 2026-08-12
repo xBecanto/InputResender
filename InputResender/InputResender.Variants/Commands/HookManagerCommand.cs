@@ -215,10 +215,11 @@ public class HookManagerCommand : DCommand_IRCore {
 		case "filter": {
 			var version = context.Args.EnumC<DHookManager.CBType> ( context.ArgID + 1, "Callback variant", true );
 			string actionStr = context[2, "Filter action"];
-			bool shouldConsume = actionStr.ToLower() switch {
-				"consume" => true,
-				"pass" => false,
-				_ => throw new ArgumentException($"Invalid filter action '{actionStr}'. Use 'consume' or 'pass'.")
+			DHookManager.ConsumingStatus shouldConsume = actionStr.ToLower() switch {
+				"skip" => DHookManager.ConsumingStatus.Skip,
+				"consume" => DHookManager.ConsumingStatus.Consume,
+				"pass" or "passthrough" => DHookManager.ConsumingStatus.Passthrough,
+				_ => throw new ArgumentException($"Invalid filter action '{actionStr}'. Use 'consume', 'skip', or 'passthrough'.")
 			};
 			
 			var keyList = GetKeysFromArgs ( context, 3 );
@@ -296,14 +297,14 @@ public class HookManagerCommand : DCommand_IRCore {
 		public readonly int AssignedDeviceID;
 
 		public readonly Dictionary<KeyCode, string> AutoCmdMap = [];
-		public readonly Dictionary<KeyCode, bool> FilterMap = [];
+		public readonly Dictionary<KeyCode, DHookManager.ConsumingStatus> FilterMap = [];
 		public readonly Dictionary<KeyCode, string> SclScriptMap = [];
 		public readonly Dictionary<string, (SeClav.SCLScriptHolder script, SeClav.SCLRuntimeHolder runtime)> LoadedScripts = [];
 
 		public bool IsProcessingEvent { get; private set; }
-		private bool _shouldPassOver = false;
+		private DHookManager.ConsumingStatus _shouldPassOver = DHookManager.ConsumingStatus.Skip;
 
-		public bool ShouldPassOver {
+		public DHookManager.ConsumingStatus ShouldPassOver {
 			get => _shouldPassOver;
 			set {
 				if ( !IsProcessingEvent ) return;
@@ -320,7 +321,7 @@ public class HookManagerCommand : DCommand_IRCore {
 		}
 
 		/// <inheritdoc cref="DHookManager.HookCallback" />
-		public bool HookCallback ( HInputEventDataHolder e ) {
+		public DHookManager.ConsumingStatus HookCallback ( HInputEventDataHolder e ) {
 			if (OwnerCmd.PreferedVerbosity > 0)
 				Owner.LogFcn?.Invoke ( $"Hook callback triggered for event: {EventToStr ( e )}, CallbackFcn: {CbFcn}" );
 
@@ -328,31 +329,31 @@ public class HookManagerCommand : DCommand_IRCore {
 			// This is currently the point of hook callback execution
 			case CallbackFcn.Invalid:
 				throw new InvalidOperationException ( "Invalid callback function type, hook not set up correctly!" );
-			case CallbackFcn.None: return true;
-			case CallbackFcn.Consume: return false;
+			case CallbackFcn.None: return DHookManager.ConsumingStatus.Skip;
+			case CallbackFcn.Consume: return DHookManager.ConsumingStatus.Consume;
 			case CallbackFcn.Print:
 				lastContext.CmdProc.ProcessLine (
 					$"print \"Encountered Input Event: {EventToStr ( e )}\"".Replace ( "(", "\\(" ).Replace ( ")", "\\)" )
 				);
-				return true;
+				return DHookManager.ConsumingStatus.Passthrough;
 			case CallbackFcn.Fcn:
 				try {
-					var CB = lastContext.CmdProc.GetVar<Func<HInputEventDataHolder, bool>> ( INPHOOKCBVarName );
+					var CB = lastContext.CmdProc.GetVar<Func<HInputEventDataHolder, DHookManager.ConsumingStatus>> ( INPHOOKCBVarName );
 					return CB ( e );
 				} catch ( Exception ex ) {
 					lastContext.CmdProc.Owner.PushDelayedError ( "Issue with InputHook callback function.", ex );
-					return false;
+					return DHookManager.ConsumingStatus.Error;
 				}
 			case CallbackFcn.Aggregate:
 				var list = lastContext.CmdProc.GetVar<List<string>> ( "hookEvents" );
 				if ( !list.Any () || list[^1].Length > 90 ) list.Add ( EventToShort ( e ) );
 				else list[^1] += ' ' + EventToShort ( e );
-				return true;
+				return DHookManager.ConsumingStatus.Passthrough;
 			case CallbackFcn.Pipeline:
-				if ( lastContext.CmdProc == null ) return false;
+				if ( lastContext.CmdProc == null ) return DHookManager.ConsumingStatus.Error;
 
 				lock (this) { // Prevent from starting multiple pipelines concurrently from the same hook manager, which could cause issues with shared state like ShouldConsume
-					ShouldPassOver = true;
+					ShouldPassOver = DHookManager.ConsumingStatus.Passthrough;
 					IsProcessingEvent = true;
 					int execSteps = DComponentJoiner.TrySend ( this, null, e );
 					if ( execSteps < MinimumPipelineSteps )
@@ -366,38 +367,36 @@ public class HookManagerCommand : DCommand_IRCore {
 					return ShouldPassOver;
 				}
 			case CallbackFcn.AutoCmd: {
-				if ( e is not HKeyboardEventDataHolder kbEvent ) return true;
-				if ( !(kbEvent.Pressed > 0) ) return true;
+				if ( e is not HKeyboardEventDataHolder kbEvent ) return DHookManager.ConsumingStatus.Error;
+				if ( kbEvent.Pressed <= 0 ) return DHookManager.ConsumingStatus.Skip;
 
 				KeyCode keyPressed = (KeyCode)kbEvent.InputCode;
-				if ( !AutoCmdMap.TryGetValue ( keyPressed, out string autoCmdGroup ) ) return true;
+				if ( !AutoCmdMap.TryGetValue ( keyPressed, out string autoCmdGroup ) ) return DHookManager.ConsumingStatus.Skip;
 
 				try {
 					string autoCommand = $"auto run {autoCmdGroup}";
 					lastContext.CmdProc.ProcessLine ( autoCommand );
-					return false;
+					return DHookManager.ConsumingStatus.Consume;
 				} catch ( Exception ex ) {
 					lastContext.CmdProc.Owner.PushDelayedError (
 						$"Error executing AutoCmd '{autoCmdGroup}' for key {keyPressed}.", ex
 					);
-					return true;
+					return DHookManager.ConsumingStatus.Error;
 				}
-
-				return true;
 			}
 			case CallbackFcn.Filter: {
-				if ( AssignedCallbackType == DHookManager.CBType.Delayed ) return true;
+				if ( AssignedCallbackType == DHookManager.CBType.Delayed ) return DHookManager.ConsumingStatus.Skip;
 
 				// If fast callback, check filter mapping for this key
-				if ( e is not HKeyboardEventDataHolder filterEvent ) return true;
+				if ( e is not HKeyboardEventDataHolder filterEvent ) return DHookManager.ConsumingStatus.Skip;
 
 				KeyCode keyPressed = (KeyCode)filterEvent.InputCode;
-				if ( FilterMap.TryGetValue ( keyPressed, out bool shouldConsume ) ) {
-					return !shouldConsume; // Return opposite of shouldConsume (true = pass through, false = consume)
+				if ( FilterMap.TryGetValue ( keyPressed, out DHookManager.ConsumingStatus shouldConsume ) ) {
+					return shouldConsume; // Return opposite of shouldConsume (true = pass through, false = consume)
 				}
 
 				// For mouse events or unmapped keys, pass through by default
-				return true;
+				return DHookManager.ConsumingStatus.Skip;
 			}
 			case CallbackFcn.SCL:
 				// Check if this key has a script configured
@@ -410,32 +409,32 @@ public class HookManagerCommand : DCommand_IRCore {
 								// Set up input event data in SCL runtime (similar to VScriptedInputProcessor)
 								// scriptInfo.runtime.SetExternVar("input_event", new SCL_InputEventType(e), Owner);
 								// scriptInfo.runtime.SetExternVar("should_consume", new BasicValueInt(0), Owner);
-								
+
 								// Execute the script
 								// lock (scriptInfo.runtime) {
 								//     scriptInfo.runtime.Execute(true);
 								// }
-								
+
 								// Check if script wants to consume the event
 								// scriptInfo.runtime.TryGetOutputVar("should_consume", Owner, out var consumeResult);
 								// if (consumeResult is BasicValueInt consumeVal && consumeVal.Value > 0) {
 								//     return false; // Consume the event
 								// }
-								
+
 								// For now, placeholder implementation
 								lastContext.CmdProc.Owner.PushDelayedMsg ( $"SCL script '{scriptPath}' processing key {keyPressed}: {sclEvent.InputCode}" );
-								return true; // Pass through for now
+								return DHookManager.ConsumingStatus.Error; // Pass through for now
 							} catch ( Exception ex ) {
 								lastContext.CmdProc.Owner.PushDelayedError ( $"Error executing SCL script '{scriptPath}' for key {keyPressed}.", ex );
-								return true; // Pass through on error
+								return DHookManager.ConsumingStatus.Error; // Pass through on error
 							}
 						} else {
 							lastContext.CmdProc.Owner.PushDelayedError ( $"SCL script '{scriptPath}' not loaded for key {keyPressed}.", new InvalidOperationException("Script not found") );
 						}
 					}
 				}
-				return true; // Pass through if no script mapping or not keyboard event
-			default: return true;
+				return DHookManager.ConsumingStatus.Skip; // Pass through if no script mapping or not keyboard event
+			default: return DHookManager.ConsumingStatus.Skip;
 			}
 
 			string EventToStr ( HInputEventDataHolder e ) {

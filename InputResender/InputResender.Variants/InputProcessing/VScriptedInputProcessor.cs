@@ -22,7 +22,7 @@ public class VScriptedInputProcessor : DInputProcessor {
 	bool WasFired = false;
 	SCLDebugger Debugger;
 	readonly List<string> DebuggerLog = [];
-	private bool ShouldPreferConsume = false;
+	private DHookManager.ConsumingStatus ShouldPreferConsume = DHookManager.ConsumingStatus.Passthrough;
 	private bool _execSafeMode = false;
 
 	public bool ExecSafeMode {
@@ -40,8 +40,8 @@ public class VScriptedInputProcessor : DInputProcessor {
 
 	public override StateInfo Info => throw new NotImplementedException ();
 
-	public override bool ProcessInput ( DataHolder[] inputCombination ) {
-		bool willConsume = ShouldPreferConsume;
+	public override DHookManager.ConsumingStatus ProcessInput ( DataHolder[] inputCombination ) {
+		DHookManager.ConsumingStatus willConsume = ShouldPreferConsume;
 		if ( _execSafeMode )
 			DebuggerLog.Add (
 				$" ... Captured {inputCombination.Select ( ( d ) => d.ToString () ).Aggregate ( ( a, b ) => a + "+" + b )} ..."
@@ -64,7 +64,7 @@ public class VScriptedInputProcessor : DInputProcessor {
 				}
 			}
 
-			if ( !passingMask ) return !willConsume;
+			if ( !passingMask ) return willConsume;
 		}
 
 
@@ -84,11 +84,13 @@ public class VScriptedInputProcessor : DInputProcessor {
 			}
 
 			ScriptRuntime.TryGetOutputVar ( "ConsumeEvent", Owner, out var res );
-			if ( res is BasicValueInt consumeVal ) {
-				willConsume = consumeVal.Value switch {
-					0   => false
-					, 1 => true
-					, _ => willConsume
+			if ( res is BasicValueString consumeVal ) {
+				willConsume = consumeVal.Value.ToLowerInvariant() switch {
+					"pass"          => DHookManager.ConsumingStatus.Passthrough
+					, "passthrough" => DHookManager.ConsumingStatus.Passthrough
+					, "consume"     => DHookManager.ConsumingStatus.Consume
+					, "skip"     => DHookManager.ConsumingStatus.Skip
+					, _             => willConsume
 				};
 			}
 		}
@@ -110,7 +112,7 @@ public class VScriptedInputProcessor : DInputProcessor {
 		//		}
 		//	}
 		//} );
-		return !willConsume;
+		return willConsume;
 	}
 
 	public void AssignScript ( SCLScriptHolder script ) {

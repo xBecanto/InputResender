@@ -51,7 +51,7 @@ namespace InputResender.Definitions.InputProcessing {
 		/// <param name="hMod">Hook of DLL containing callback. Must be <see langword="null"/> if in same thread, otherwise following is recommended: <code>LoadLibrary(TEXT("c:\\myapp\\sysmsg.dll"))</code></param>
 		/// <param name="dwThreadId">Process ID on which the hook should operate</param>
 		/// <returns>Hook handle number, ID to this specific hook</returns>
-		public abstract IDictionary<VKChange, Hook> SetHookEx ( HHookInfo hookInfo, Func<DictionaryKey, HInputData, bool> lpfn );
+		public abstract IDictionary<VKChange, Hook> SetHookEx ( HHookInfo hookInfo, Func<DictionaryKey, HInputData, DHookManager.ConsumingStatus> lpfn );
 		/// <summary>Stop hook specified by its ID of <paramref name="hhk"/></summary>
 		public abstract bool UnhookHookEx ( Hook hookID );
 		/// <summary>Pass processing to another hook in system queue</summary>
@@ -309,7 +309,7 @@ namespace InputResender.Definitions.InputProcessing {
 		public readonly DictionaryKey Key;
 		public nint HookID { get; private set; }
 		// If this callback returns true, next callback in queue will be called. If returns false, processing is terminated.
-		public Func<DictionaryKey, HInputData, bool> HLCallback;
+		public Func<DictionaryKey, HInputData, DHookManager.ConsumingStatus> HLCallback;
 		public bool EnforcePassthrough = false;
 		public Action<int, IntPtr, IntPtr> Log;
 		public event Action<string, Exception> OnError;
@@ -322,7 +322,7 @@ namespace InputResender.Definitions.InputProcessing {
 
 		private DLowLevelInput LLInput { get => Owner; }
 
-		public Hook ( DLowLevelInput owner, HHookInfo hookInfo, DictionaryKey key, Func<DictionaryKey, HInputData, bool> callback, Action<int, IntPtr, IntPtr> log = null ) : base ( owner ) {
+		public Hook ( DLowLevelInput owner, HHookInfo hookInfo, DictionaryKey key, Func<DictionaryKey, HInputData, DHookManager.ConsumingStatus> callback, Action<int, IntPtr, IntPtr> log = null ) : base ( owner ) {
 			Key = key;
 			HookInfo = (HHookInfo)hookInfo.Clone ();
 			HLCallback = callback;
@@ -395,7 +395,7 @@ namespace InputResender.Definitions.InputProcessing {
 			else InputManagementService.NotifyProbes ( this, nCode, wParam, lParam, extras );
 			if ( Verbose ) Owner.Owner.PushDelayedMsg ($"Callback for input: {nCode}, {wParam}, {lParam}");
 
-			bool resend = true;
+			DHookManager.ConsumingStatus resend = DHookManager.ConsumingStatus.Skip;
 			try {
 				/* From MS Docs https://learn.microsoft.com/en-us/previous-versions/windows/desktop/legacy/ms644985(v=vs.85)
 				 * A code the hook procedure uses to determine how to process the message.
@@ -403,13 +403,13 @@ namespace InputResender.Definitions.InputProcessing {
 				 * the CallNextHookEx function without further processing and should return
 				 * the value returned by CallNextHookEx.
 				 */
-				if ( (nCode >= 0) | (EnforcePassthrough) ) {
+				if ( (nCode >= 0) & (!EnforcePassthrough) ) {
 					var res = LLInput.ParseHookData ( Key, wParam, lParam );
 					if ( res != null ) {
 						if ( !res.IsInvalid )
 							// KeyCode.None is treated 'Invalid' event, unsure if this could be actually raised by system
 							// Currently this is used to mark simulated event that shouldn't be re-captured
-							resend = HLCallback == null ? true : HLCallback ( Key, res );
+							resend = HLCallback?.Invoke ( Key, res ) ?? DHookManager.ConsumingStatus.Skip;
 					} else {
 						LLInputLogger.Log ( HookID, 'h', $"Failed to parse {nCode}|{wParam}|{lParam} to HInputData" );
 						OnError?.Invoke ( $"Failed to parse {nCode}|{wParam}|{lParam} to HInputData", null );
@@ -422,7 +422,7 @@ namespace InputResender.Definitions.InputProcessing {
 				OnError?.Invoke ( $"Error during callback for {Key}", e );
 			}
 			LLInputLogger.Log ( HookID, 'h', $"Finished processing {nCode}|{wParam}|{lParam} (MsgID: {MsgID}). Resend: {resend}" );
-			return resend ? LLInput.CallNextHook ( HookID, nCode, wParam, lParam ) : 1;
+			return resend == DHookManager.ConsumingStatus.Consume ? 1 : LLInput.CallNextHook ( HookID, nCode, wParam, lParam );
 		}
 
 		public override DataHolderBase<DLowLevelInput> Clone () {

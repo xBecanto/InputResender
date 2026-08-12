@@ -1,18 +1,18 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using InputResender.Definitions;
 using InputResender.Definitions.InputProcessing;
 using InputResender.Variants.InputProcessing;
 using MdxLibs.Core;
 
-namespace InputResender.Variants.Commands; 
+namespace InputResender.Variants.Commands;
 public class ScriptedInputProcessorCommand : DCommand_IRCore {
 	public override string Description => "Command to access scripted-based input processor.";
 
 	private static List<string> CommandNames = ["SIP"];
 	private static List<(string, Type)> InterCommands = [
 		("status", null)
-		, ("force", null)
+		, ("add", null)
 		, ("assign", null)
 		, ("safemode", null)
 		];
@@ -24,9 +24,9 @@ public class ScriptedInputProcessorCommand : DCommand_IRCore {
 	protected override CommandResult ExecIner ( CmdContext context ) {
 		if ( TryPrintHelp ( context.Args, context.ArgID + 1, () => context.SubAction switch {
 			"status" => CallName + " status: Get the current status of the Scripted Input Processor.",
-			"force" => CallName + " force: Force to use SIP as input processor.",
+			"add" => CallName + " add [-s|--soft] [-f|--force]: Add the SIP as input processor.\n\rsoft: If some InputProcessor is already registered, deactivate it instead of unregistering.\n\rforce: Force the new SIP to be the only existing InputProcessor by removing any already existing ones.",
 			"assign" => CallName + " assign <ScriptName> [-s|--safe]: Assign a compiled script to the SIP.\n\tScriptName: Name of the script to assign, compiled with 'seclav parse <ScriptFile>'.",
-			"safemode" => CallName + " on|off",
+			"safemode" => CallName + " safemode: Enable or disable safe mode for the SIP.",
 			_ => null,
 		}, out var helpRes ) ) return helpRes;
 
@@ -42,14 +42,28 @@ public class ScriptedInputProcessorCommand : DCommand_IRCore {
 				return new CommandResult ( "SIP running, no skript assigned." );
 			return new CommandResult ( $"SIP running, assigned {(scriptedSIP.Script.IsUsingModule ( SIP_SCL_Module.ModuleName ) ? "integratable" : "non-integratable")} script '{scriptedSIP.Script.ScriptName}'." );
 		}
-		case "force": {
+		case "add": {
 			DInputResenderCore core = context.CmdProc.GetVar<DInputResenderCore> ( CoreManagerCommand.ActiveCoreVarName );
 			if ( core == null ) return new CommandResult ( "No active core found." );
-			var sip = core.Fetch<DInputProcessor> ();
-			if ( sip != null && sip is VScriptedInputProcessor )
-				return new CommandResult ( "Input Processor is already SIP." );
 
-			core.Unregister ( sip );
+			context.Args.RegisterSwitch ( 's', "soft" );
+			context.Args.RegisterSwitch ( 'f', "force" );
+
+			if ( context.Args.Present ( "--force" ) ) {
+				while (true) {
+					var existing = core.Fetch<DInputProcessor> ();
+					if ( existing == null ) break;
+					core.Unregister ( existing );
+				}
+			}
+
+			var sip = core.Fetch<DInputProcessor> ();
+			if (sip != null) {
+				if ( sip is VScriptedInputProcessor )
+					return new CommandResult ( "Input Processor is already SIP." );
+
+				if ( context.Args.Present ( "--soft" ) ) sip.PipelineEnabled = false;
+			}
 			var newSIP = new VScriptedInputProcessor ( core );
 			return new CommandResult ( "SIP assigned as Input Processor." );
 		}

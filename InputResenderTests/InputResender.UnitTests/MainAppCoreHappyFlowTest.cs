@@ -144,9 +144,10 @@ namespace InputResender.UnitTests {
 			ReceivedInput[0].Should ().NotBeNull ();
 			ReceivedInput[1].Should ().NotBeNull ();
 			ReceivedInput[0].DeviceID.Should ().Be ( pressHolder.HookInfo.DeviceID ).And.Be ( ReceivedInput[1].DeviceID );
-			ReceivedInput[1].Pressed.Should ().BeFalse ( "Second event will release up the key" );
-			ReceivedInput[0].Pressed.Should ().BeTrue ( "First event will press down the key" );
+			ReceivedInput[0].X.Should ().Be ( 1 );
+			ReceivedInput[1].X.Should ().Be ( 1 );
 			ReceivedInput[0].Cmnd.Should ().Be ( InputData.Command.KeyPress );
+			ReceivedInput[1].Cmnd.Should ().Be ( InputData.Command.KeyRelease );
 			ReceivedInput[0].Key.Should ().Be ( KeyCode.E ).And.Be ( ReceivedInput[1].Key );
 		}
 	}

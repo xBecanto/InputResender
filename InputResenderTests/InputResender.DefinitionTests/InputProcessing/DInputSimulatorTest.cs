@@ -58,9 +58,9 @@ namespace InputResender.DefinitionTests.InputProcessing {
 				InputReader.ReleaseHook ( e.HookInfo );
 		}
 
-		protected bool SimpleCallback (DictionaryKey hookKey, HInputEventDataHolder data) {
+		protected DHookManager.ConsumingStatus SimpleCallback (DictionaryKey hookKey, HInputEventDataHolder data) {
 			CallbackList.Add ( (hookKey, data) );
-			return true;
+			return DHookManager.ConsumingStatus.Consume;
 		}
 	}
 }

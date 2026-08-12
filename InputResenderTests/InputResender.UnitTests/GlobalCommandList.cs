@@ -22,6 +22,7 @@ internal class GlobalCommandList {
 		typeof( CoreCreatorCommand ),
 		typeof( HookManagerCommand ),
 		typeof( ScriptedInputProcessorCommand ),
+		typeof( VInputProcessorCommand ),
 		typeof( VTapperInputCommand ),
 		typeof( VTapperLearner ),
 		typeof( ComponentCommandLoader ),

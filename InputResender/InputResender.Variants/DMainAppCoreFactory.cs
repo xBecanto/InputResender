@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using InputResender.Definitions;
 using InputResender.Definitions.Commands;
 using InputResender.Definitions.InputProcessing;
@@ -115,10 +115,15 @@ public class DInputResenderCoreFactory {
 		DComponentJoiner.TryRegisterJoiner<HookManagerCommand.SHookManager, DInputMerger, HInputEventDataHolder> ( compJoiner, ( joiner, merger, data ) =>
 			(true, merger.ProcessInput ( data )) );
 		DComponentJoiner.TryRegisterJoiner<DInputMerger, DInputProcessor, HInputEventDataHolder[]> ( compJoiner, ( joiner, processor, data ) => {
-			bool shouldPassOver = processor.ProcessInput ( data );
-			return (true, shouldPassOver);
+			DHookManager.ConsumingStatus shouldPassOver = processor.ProcessInput ( data );
+			bool accepts = shouldPassOver switch{
+				DHookManager.ConsumingStatus.Consume     => true,
+				DHookManager.ConsumingStatus.Passthrough => true,
+				_                                        => false
+			};
+			return (accepts, shouldPassOver);
 		} );
-		DComponentJoiner.TryRegisterJoiner<DInputProcessor, HookManagerCommand.SHookManager, bool> ( compJoiner, (
+		DComponentJoiner.TryRegisterJoiner<DInputProcessor, HookManagerCommand.SHookManager, DHookManager.ConsumingStatus> ( compJoiner, (
 			joiner, manager, data
 		) => {
 			if ( !manager.IsProcessingEvent ) return (false, data);
@@ -145,5 +150,18 @@ public class DInputResenderCoreFactory {
 			bool processed = learner.ProcessTypedKey ( data );
 			return (processed, null);
 		});
+		DComponentJoiner.TryRegisterJoiner<DInputProcessor, DInputProcessor, InputData> ( compJoiner
+			, ( joiner, processor, data ) => {
+				var simulator = processor.Owner.Fetch<DInputSimulator> ();
+				var llData = simulator.ParseCommand ( data );
+				DHookManager.ConsumingStatus shouldPassOver = processor.ProcessInput ( llData );
+				bool accepts = shouldPassOver switch{
+					DHookManager.ConsumingStatus.Consume => true,
+					DHookManager.ConsumingStatus.Passthrough => true,
+					_ => false
+				};
+				return (accepts, shouldPassOver);
+			}
+		);
 	}
 }

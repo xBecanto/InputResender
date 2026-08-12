@@ -84,7 +84,7 @@ public class PerformanceTestCommand : DCommand_IRCore {
 		var hookKeys = reader.SetupHook ( hookInfo, ( _, e ) => {
 			Interlocked.Increment ( ref captured );
 			if ( countdown is { IsSet: false } ) countdown.Signal ();
-			return true;
+			return DHookManager.ConsumingStatus.Passthrough;
 		}, null );
 		foreach ( var kvp in hookKeys ) hookInfo.AddHookID ( kvp.Value, kvp.Key );
 
@@ -119,7 +119,7 @@ public class PerformanceTestCommand : DCommand_IRCore {
 			processor.ProcessInput ( merged ?? [] );
 			Interlocked.Increment ( ref processed );
 			if ( countdown is { IsSet: false } ) countdown.Signal ();
-			return true;
+			return DHookManager.ConsumingStatus.Passthrough;
 		}, null );
 		foreach ( var kvp in hookKeys ) hookInfo.AddHookID ( kvp.Value, kvp.Key );
 
@@ -157,7 +157,7 @@ public class PerformanceTestCommand : DCommand_IRCore {
 		var hookKeys = reader.SetupHook ( hookInfo, ( _, e ) => {
 			int steps = DComponentJoiner.TrySend ( reader, null, e );
 			if ( steps > 0 ) Interlocked.Increment ( ref processed );
-			return true;
+			return DHookManager.ConsumingStatus.Passthrough;
 		}, null );
 		foreach ( var kvp in hookKeys ) hookInfo.AddHookID ( kvp.Value, kvp.Key );
 
@@ -265,7 +265,7 @@ public class PerformanceTestCommand : DCommand_IRCore {
 		var hookInfo = new HHookInfo ( reader, 0, VKChange.KeyDown, VKChange.KeyUp );
 		var hookKeys = reader.SetupHook ( hookInfo, ( _, e ) => {
 			DComponentJoiner.TrySend ( reader, null, e );
-			return true;
+			return DHookManager.ConsumingStatus.Passthrough;
 		}, null );
 		foreach ( var kvp in hookKeys ) hookInfo.AddHookID ( kvp.Value, kvp.Key );
 

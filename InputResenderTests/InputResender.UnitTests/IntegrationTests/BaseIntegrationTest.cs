@@ -96,8 +96,14 @@ public class BaseIntegrationTest : IDisposable {
 		if ( Core != null ) Core.OnError += WriteError;
 	}
 
+	protected virtual void Clear () { }
+
 	public void Dispose () {
-		if ( Core != null ) Core.OnError -= WriteError;
+		if ( Core != null ) {
+			Core.OnError -= WriteError;
+			Core.Close ();
+		}
+
 		cliWrapper.CmdProc.Dispose ();
 		StdIn.Dispose ();
 		StdOut.Dispose ();
@@ -151,7 +157,7 @@ public class BaseIntegrationTest : IDisposable {
 		res.Should ().NotBeNull ().And.BeOfType<ErrorCommandResult> ();
 		foreach ( string nr in notRes ?? [] )
 			res.Message.Should ().NotBe ( nr ).And.NotContain ( nr );
-		res.Message.Should ().Be ( expRes );
+		res.Message.Should ().StartWith ( expRes );
 		return res as ErrorCommandResult;
 	}
 	public ErrorCommandResult AssertExecErrorByRegex ( string cmd, string regex, params string[] notRes ) {

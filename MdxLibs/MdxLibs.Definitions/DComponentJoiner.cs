@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using MdxLibs.Core;
@@ -35,24 +35,25 @@ public abstract class DComponentJoiner : ComponentBase_CoreBase {
 	// Pipelines are started by component A executing some function and generating some data.
 	//   Thus order the order of processing in joiner.
 	/// <summary>Register a joiner function that will process A's output via component B</summary>
-	public abstract void RegisterJoiner ( Type tA, Type tB, string dsc, Func<DComponentJoiner, object, (bool, object)> joiner, bool force = false );
+	public abstract void RegisterJoiner ( Type tA, Type tB, string dsc, Func<DComponentJoiner, ComponentSelector, object, (bool, object)> joiner, bool force = false );
 
 	public abstract object RegisterPipeline ( params ComponentSelector[] types );
 	public abstract void UnregisterPipeline ( object pipelineId );
 	/// <summary>Attempt to send data throught the pipeline that starts at the origin. Returns number of successful steps.</summary>
-	public abstract int Send ( ComponentBase origin, Type target, object data );
+	public abstract int Send ( ComponentBase origin, ComponentSelector target, object data );
 	public static void TryRegisterJoiner<CA, CB, DT> ( DComponentJoiner compJoiner, Func<DComponentJoiner, CB, DT, (bool, object)> joiner, string dsc = null ) where CA : ComponentBase where CB : ComponentBase {
 		ArgumentNullException.ThrowIfNull ( compJoiner, nameof ( compJoiner ) );
 		ArgumentNullException.ThrowIfNull ( joiner, nameof ( joiner ) );
 		if ( dsc == null ) dsc = $"{typeof ( CA ).Name}<{typeof ( DT ).Name}> => {typeof ( CB ).Name}";
-		compJoiner.RegisterJoiner ( typeof ( CA ), typeof ( CB ), dsc, ( joinerComp, obj ) => {
+		compJoiner.RegisterJoiner ( typeof ( CA ), typeof ( CB ), dsc, ( joinerComp, bSelect, obj ) => {
 			if ( obj == null ) {
 				throw new NullReferenceException ( $"Joiner {dsc} received null data!" );
 			}
 			string objType = obj.GetType ().Name + " - " + obj.GetType ().FullName;
 			if ( obj is not DT ) return (false, null);
-			var activeComp = joinerComp.Owner?.Fetch<CB> ();
-			if ( activeComp == null ) return (false, null);
+			//var activeComp = joinerComp.Owner?.Fetch<CB> ();
+			var activeComp = bSelect.Fetch<CB> ( joinerComp.Owner );
+			if ( activeComp == null || !activeComp.PipelineEnabled || activeComp is not CB ) return (false, null);
 
 			if ( compJoiner.PreferUnsafe ) {
 				return joiner ( compJoiner, activeComp, (DT)obj );
@@ -67,12 +68,13 @@ public abstract class DComponentJoiner : ComponentBase_CoreBase {
 		} );
 	}
 	/// <summary>Try to run a pipeline to any of the given data objects. Returns number of successful steps for the first successful pipeline start, or 0 if none succeeded.</summary>
-	public static int TrySend (ComponentBase origin, Type target, params object[] data) {
+	public static int TrySend (ComponentBase origin, ComponentSelector target, params object[] data) {
 		if ( origin == null ) return 0;
 		if ( data == null ) return 0;
 		if ( data.Length == 0 ) return 0;
 
 		var joiner = origin.Owner.Fetch<DComponentJoiner> ();
+		if ( joiner == null ) return 0;
 		foreach (object o in data) {
 			int ret = joiner.Send ( origin, target, o );
 			if ( ret > 0 ) return ret;
@@ -92,10 +94,13 @@ public class VComponentJoiner : DComponentJoiner {
 	private static object eventNumberLockObj = new ();
 	private static int eventNumber = 11;
 
-	private readonly Dictionary<(Type, Type), HashSet<(Func<DComponentJoiner, object, (bool, object)> joiner, string dsc)>> Joiners;
-	private readonly Dictionary<ComponentSelector, (List<ComponentSelector> comps, string dsc)> Links = new ();
+	public event Action<string> OnPipelineFinishLog;
 
-	public override void RegisterJoiner ( Type tA, Type tB, string dsc, Func<DComponentJoiner, object, (bool, object)> joiner, bool force = false ) {
+	private readonly Dictionary<(Type, Type), HashSet<(Func<DComponentJoiner, ComponentSelector, object, (bool, object)> joiner, string dsc)>> Joiners;
+	private readonly Dictionary<ComponentSelector, Dictionary<int, (ComponentSelector[] comps, string dsc)>> Links = new ();
+	private int PipelineRegisterID = 42;
+
+	public override void RegisterJoiner ( Type tA, Type tB, string dsc, Func<DComponentJoiner, ComponentSelector, object, (bool, object)> joiner, bool force = false ) {
 		ArgumentNullException.ThrowIfNull ( tA, nameof ( tA ) );
 		ArgumentNullException.ThrowIfNull ( tB, nameof ( tB ) );
 		ArgumentNullException.ThrowIfNull ( dsc, nameof ( dsc ) );
@@ -114,29 +119,39 @@ public class VComponentJoiner : DComponentJoiner {
 		ArgumentOutOfRangeException.ThrowIfLessThan ( CIs.Length, 2, nameof ( CIs ) );
 
 		string dsc = string.Join ( " -> ", CIs.Select ( x => x.ToString () ) );
-		Links.Add ( CIs[0], ([.. CIs], dsc) );
+		int registerID = PipelineRegisterID++;
+		if (Links.TryGetValue ( CIs[0], out var existing ) )
+			existing.Add ( registerID, (CIs[..], dsc) );
+		else Links.Add ( CIs[0], new() { { registerID, (CIs[..], dsc) } } );;
 		Note ( $"Registered pipeline: {dsc}" );
-		return CIs[0];
+		return (CIs[0], registerID);
 	}
 
 	public override void UnregisterPipeline ( object pipelineId ) {
-		if ( pipelineId is not ComponentSelector CI )
+		if ( pipelineId is not ValueTuple<ComponentSelector, int> id )
 			throw new ArgumentException ( "Invalid pipeline ID.", nameof ( pipelineId ) );
-		if ( Links.Remove ( CI ) ) Note ( $"Unregistered pipeline starting with {CI}" );
-		else throw new KeyNotFoundException ( "Pipeline ID not found." );
+		if ( Links.TryGetValue ( id.Item1, out var existing ) && existing.Remove ( id.Item2 ) ) {
+			Note ( $"Unregistered pipeline starting with {id.Item1}" );
+			if ( existing.Count == 0 ) Links.Remove ( id.Item1 );
+		} else throw new KeyNotFoundException ( "Pipeline ID not found." );
 	}
 
 	/// <inheritdoc/>
-	public override int Send ( ComponentBase origin, Type target, object data ) {
+	public override int Send ( ComponentBase origin, ComponentSelector target, object data ) {
 		int thisID;
 		lock ( eventNumberLockObj ) {
 			thisID = eventNumber;
 			eventNumber++;
 		}
-		string dsc = target == null ? "null" : target.Name;
-		dsc = $"Attempting to start Pipeline #{thisID}\n Sending <{data.GetType ().Name}> from {origin.GetType().Name} to {dsc}";
+		string dsc = target == null ? "null" : target.ToString ();
+		dsc = $"Attempting to start Pipeline #{thisID}  ({DateTime.Now.TimeOfDay})\n Sending <{data.GetType ().Name}> from {origin.GetType().Name} to {dsc}";
 		dsc += $"\n  Data: {data}";
-		foreach (var pipelineInfo in Links.Values) {
+
+		List<(ComponentSelector[] comps, string dsc)> pipelines
+			= Links.Where ( x => x.Key.Fits ( origin ) )
+			.SelectMany ( x => x.Value.Values ).ToList ();
+
+		foreach (var pipelineInfo in pipelines) {
 			var pipeline = pipelineInfo.comps;
 
 			foreach ( var componentSelector in  pipeline ) {
@@ -146,7 +161,7 @@ public class VComponentJoiner : DComponentJoiner {
 				componentSelector.ID = origin.Owner[origin].GlobalID;
 			}
 
-			Type origT = origin.GetType ();
+			/*Type origT = origin.GetType ();
 			Type[] firstTs = GetCompTypes ( pipeline[0] ).ToArray_VariantFirst ();
 			if ( firstTs == null ) continue;
 			bool matchesOrigin = false;
@@ -156,17 +171,20 @@ public class VComponentJoiner : DComponentJoiner {
 					break;
 				}
 			}
-			if ( !matchesOrigin ) continue; // Pipeline does not start with origin component, skip
+			if ( !matchesOrigin ) continue; // Pipeline does not start with origin component, skip*/
 
-			if ( pipeline.Count < 2 ) continue;
+			if ( pipeline.Length < 1 ) continue;
 			if ( target != null ) {
 				TypeTree origTypes = GetCompTypes ( origin );
-				if ( GetJoiners ( origTypes.ToArray_VariantFirst (), [target] ) == null ) continue; // No valid joiner for this specific target, skip
+				TypeTree targTypes = GetCompTypes ( target );
+
+				if ( GetJoiners ( origTypes.ToArray_VariantFirst (), targTypes.ToArray_VariantFirst () ) == null ) continue; // No valid joiner for this specific target, skip
 				// Current idea is that any target from the pipeline can be provided (that is any but first step of the pipeline). Alternative would be to strictly demand only the first or last step as target.
 				HashSet<Type> pipeTargets = [];
 				foreach ( var pipe in pipeline)
 					pipeTargets.UnionWith ( GetCompTypes ( pipe ).ToArray_VariantFirst () );
-				if ( !pipeTargets.Contains ( target ) ) continue; // Target is not in the pipeline, skip
+				Type targType = targTypes.Variant;
+				if ( !pipeTargets.Contains ( targType ) ) continue; // Target is not in the pipeline, skip
 			}
 
 			(bool success, object newData) = NextStep ( pipeline[0], pipeline[1], data );
@@ -175,26 +193,28 @@ public class VComponentJoiner : DComponentJoiner {
 			dsc += $"\n Using pipeline '{pipelineInfo.dsc}'";
 			dsc += $"\n Step 1 {pipeline[0]} -> {pipeline[1]} (Result: {newData})";
 
-			for (int i = 2; i < pipeline.Count; i++ ) {
+			for (int i = 2; i < pipeline.Length; i++ ) {
 				(success, newData) = NextStep ( pipeline[i - 1], pipeline[i], newData );
 				dsc += $"\n Step {i} {(success ? "OK" : "FAIL")} {pipeline[i - 1]} -> {pipeline[i]} (Result: {newData})";
 				if ( !success ) {
-					dsc += $"\nPipeline stopped after failed step #{i - 1}";
-					//Owner.PushDelayedMsg ( dsc );
+					dsc += $"\nPipeline stopped after failed step #{i - 1}  ({DateTime.Now.TimeOfDay})";
+					OnPipelineFinishLog?.Invoke ( dsc );
 					return i - 1;
 				}
 
-				if ( newData == null && i + 1 < pipeline.Count ) {
-					dsc += $"\nPipeline stopped at step #{i} due to null data.";
-					Owner.PushDelayedMsg ( dsc );
+				if ( newData == null && i + 1 < pipeline.Length ) {
+					dsc += $"\nPipeline stopped at step #{i} due to null data  ({DateTime.Now.TimeOfDay})";
+					OnPipelineFinishLog?.Invoke ( dsc );
 					return i;
 				}
 			}
-			dsc += "\nPipeline finished";
-			//Owner.PushDelayedMsg ( dsc );
-			return pipeline.Count;
+			dsc += $"\nPipeline finished  ({DateTime.Now.TimeOfDay})";
+			OnPipelineFinishLog?.Invoke ( dsc );
+			return pipeline.Length;
 		}
-		dsc = target == null ? string.Empty : $" -> {target.Name}";
+		dsc += target == null ? string.Empty : $" -> {target}";
+		dsc += $"\nPipeline #{thisID} not found ({DateTime.Now.TimeOfDay})";
+		OnPipelineFinishLog?.Invoke ( dsc );
 		//Owner.PushDelayedMsg ( $"No pipeline #{thisID} found for {origin.GetType ().Name}{dsc} : <{data.GetType ().Name}> {data}" );
 		return 0;
 	}
@@ -203,7 +223,7 @@ public class VComponentJoiner : DComponentJoiner {
 	private TypeTree GetCompTypes ( ComponentBase comp ) => new ( comp );
 	private TypeTree GetCompTypes ( Type compType ) => GetCompTypes ( Owner.Fetch ( compType ) );
 
-	private HashSet<(Func<DComponentJoiner, object, (bool, object)> joiner, string dsc)> GetJoiners ( Type[] Atypes, Type[] Btypes ) {
+	private HashSet<(Func<DComponentJoiner, ComponentSelector, object, (bool, object)> joiner, string dsc)> GetJoiners ( Type[] Atypes, Type[] Btypes ) {
 		if ( Atypes == null || Btypes == null ) return null;
 		foreach ( var Atype in Atypes ) {
 			foreach ( var Btype in Btypes ) {
@@ -219,7 +239,7 @@ public class VComponentJoiner : DComponentJoiner {
 		if ( joinerSet != null )
 			foreach ( var joiner in joinerSet ) {
 				string dsc = joiner.dsc;
-				(bool success, object newData) = joiner.joiner.Invoke ( this, data );
+				(bool success, object newData) = joiner.joiner.Invoke ( this, B, data );
 				if ( success ) return (true, newData);
 			}
 		return (false, null);
@@ -241,7 +261,7 @@ public class VComponentJoiner : DComponentJoiner {
 			Links = new string[owner.Links.Count];
 			int i = 0;
 			foreach (var link in owner.Links)
-				Links[i++] = $"{link.Key} :: {link.Value.dsc}";
+				Links[i++] = $"{link.Key} :: {string.Join ( " | ", link.Value.Values.Select ( x => $"{x.dsc}" ) )}";
 		}
 
 		public readonly string[] JoinersInfo;

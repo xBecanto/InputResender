@@ -65,10 +65,10 @@ namespace InputResender.DefinitionTests.InputProcessing {
 			return new HKeyboardEventDataHolder ( owner, hookInfo, 1, VKChange.KeyDown );
 		}
 
-		protected bool SimpleTestCallback ( DictionaryKey key, HInputEventDataHolder inpudData ) {
+		protected DHookManager.ConsumingStatus SimpleTestCallback ( DictionaryKey key, HInputEventDataHolder inpudData ) {
 			EventList.Add ( inpudData );
 			onInputReceived.Set ();
-			return false;
+			return DHookManager.ConsumingStatus.Consume;
 		}
 
 		HHookInfo GenerateHookInfo ( VKChange keyEvent = VKChange.KeyDown, int DeviceID = 1 ) => new HHookInfo ( TestObject, DeviceID, keyEvent );

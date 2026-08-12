@@ -146,11 +146,11 @@ namespace InputResender.Windows.Tests {
 			TestObject.ErrorList.Should ().BeEmpty ();
 		}
 
-		public bool Callback ( DictionaryKey hookKey, HInputData inputData ) {
+		public DHookManager.ConsumingStatus Callback ( DictionaryKey hookKey, HInputData inputData ) {
 			messages.Add ( (hookKey, inputData) );
 			Thread.MemoryBarrier ();
 			waiter.Set ();
-			return false; // Consume the event
+			return DHookManager.ConsumingStatus.Consume; // Consume the event
 		}
 		public static uint GetPID () => (uint)Process.GetCurrentProcess ().Id;
 

@@ -1,4 +1,5 @@
-﻿using Xunit;
+﻿using InputResender.Definitions.InputProcessing;
+using Xunit;
 using Xunit.Abstractions;
 
 namespace InputResender.UnitTests.IntegrationTests.CommandTests;

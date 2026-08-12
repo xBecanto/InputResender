@@ -14,6 +14,12 @@ namespace InputResender.Definitions.InputProcessing {
 		Dictionary<DictionaryKey, Hook> HookList;
 		int LastID = 1;
 
+		private readonly List<(int, nint, nint, nint)> CapturedEventList = [];
+
+		public IReadOnlyList<(int nnCode, nint wParam, nint lParam, nint ret)> CapturedEvents
+			=> CapturedEventList;
+		public bool CaptureEvents = false;
+
 		public MLowLevelInput ( CoreBase owner ) : base ( owner ) {
 			HookList = [];
 			inputLLParser.Register ( new MLLInputStatusExtra.MLLInputStatusParser () );
@@ -64,7 +70,7 @@ namespace InputResender.Definitions.InputProcessing {
 		public override HInputData ParseHookData ( DictionaryKey hookID, nint vkChngCode, nint vkCode ) => new HInputData_Mock ( this, hookID, GetChangeType ( (int)vkChngCode ), Marshal.ReadIntPtr ( vkCode ) );
 		public override IReadOnlyCollection<HInputData> TryParseHookDataContextfree ( nint vkChngCode, nint vkCode ) => [new HInputData_Mock ( this, DictionaryKey.Empty, GetChangeType ( (int)vkChngCode ), Marshal.ReadIntPtr ( vkCode ) )];
 		/// <inheritdoc />
-		public override IDictionary<VKChange, Hook> SetHookEx ( HHookInfo hookInfo, Func<DictionaryKey, HInputData, bool> callback ) {
+		public override IDictionary<VKChange, Hook> SetHookEx ( HHookInfo hookInfo, Func<DictionaryKey, HInputData, DHookManager.ConsumingStatus> callback ) {
 			if ( SetHookResult < 0 ) return null;
 			var hookKey = HookKeyFactory.NewKey ();
 			var hookID = LastID++;
@@ -95,7 +101,8 @@ namespace InputResender.Definitions.InputProcessing {
 		public void RaiseEvent ( DictionaryKey hookID, int nCode, IntPtr wParam, IntPtr lParam ) {
 			if ( HookList.TryGetValue ( hookID, out var hook ) ) {
 				int nnCode = nCode < 0 ? -1 : 1;
-				hook.Callback ( nnCode, wParam, lParam );
+				var ret = hook.Callback ( nnCode, wParam, lParam );
+				if ( CaptureEvents ) CapturedEventList.Add ( (nnCode, wParam, lParam, ret) );
 			} else Owner.PushDelayedMsg ( $"Hook with key {hookID} was not found!" );
 		}
 		public void SetMockReturn ( Part part, bool validReturn ) {

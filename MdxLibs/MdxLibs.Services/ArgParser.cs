@@ -278,6 +278,33 @@ public class ArgParser {
 			return Error ( $"Argument #{id}({ret}) is too short. {dsc}", ErrStringTooShortByIDWithOut, shouldThrow, string.Empty );
 		return ret;
 	}
+
+	public const int ErrBoolTooShortByID = 9;
+	public const int ErrBoolInvalidByID = 9;
+	public bool Bool ( int id, string dsc, bool shouldThrow = false ) {
+		string ret = Get ( id, dsc, shouldThrow );
+		if ( ret == null ) return Error ( $"Argument #{id} not found. {dsc}", ErrBoolTooShortByID, shouldThrow, false);
+		var text = ret.Trim ().ToLowerInvariant ();
+		return text switch {
+			"1" or "true" or "t" or "on" or "enable" or "enabled"       => true
+			, "0" or "false" or "f" or "off" or "disable" or "disabled" => false
+			, _ => Error ( $"Argument #{id}({ret}) could not be parsed to bool. {dsc}", ErrBoolInvalidByID, shouldThrow, false ),
+		};
+	}
+
+	public const int ErrBoolTooShortByName = 9;
+	public const int ErrBoolInvalidByName = 9;
+	public bool Bool ( string name, string dsc, bool shouldThrow = false ) {
+		string ret = Get ( name, dsc, shouldThrow );
+		if ( ret == null ) return Error ( $"Argument #{name} not found. {dsc}", ErrBoolTooShortByID, shouldThrow, false);
+		var text = ret.Trim ().ToLowerInvariant ();
+		return text switch {
+			"1" or "true" or "t" or "on" or "enable" or "enabled"       => true
+			, "0" or "false" or "f" or "off" or "disable" or "disabled" => false
+			, _ => Error ( $"Argument #{name}({ret}) could not be parsed to bool. {dsc}", ErrBoolInvalidByID, shouldThrow, false ),
+		};
+	}
+
 	public bool Present ( int id ) => this[id]?.errCode == 0;
 	public bool Present ( string key ) => this[key]?.errCode == 0;
 

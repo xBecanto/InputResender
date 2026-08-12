@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using MdxLibs.Services;
 
@@ -20,6 +20,7 @@ namespace MdxLibs.Core {
 	public abstract class ComponentBase : IComponentBase {
 		public CoreBase Owner { get; private set; }
 		public abstract int ComponentVersion { get; }
+		public virtual bool PipelineEnabled { get; set; } = true;
 		public readonly DateTime CreationTime;
 		public readonly IReadOnlyList<(string opCode, Type opType)> SupportedCommands;
 		private static int NextID = Random.Shared.Next ();

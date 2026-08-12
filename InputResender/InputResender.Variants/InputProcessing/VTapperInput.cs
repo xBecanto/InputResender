@@ -167,17 +167,17 @@ namespace InputResender.Variants.InputProcessing {
 		}
 
 		/// <inheritdoc/>
-		public override bool ProcessInput ( DataHolder[] input ) {
+		public override DHookManager.ConsumingStatus ProcessInput ( DataHolder[] input ) {
 			int Cnt = input == null ? -1 : input.Length;
-			if ( Cnt < 1 ) return true;
+			if ( Cnt < 1 ) return DHookManager.ConsumingStatus.Error;
 			var mods = ReadModifiers ( input );
-			if ( (mods & TriggerMod) < TriggerMod ) return true;
+			if ( (mods & TriggerMod) < TriggerMod ) return DHookManager.ConsumingStatus.Skip;
 
 			var parsed = ParseInput ( input );
 
 			if ( parsed.AllSkipped ) {
 				if ( Verbose ) Owner.LogFcn?.Invoke ( $"No relevant keys in input, skipping." );
-				return true;
+				return DHookManager.ConsumingStatus.Skip;
 			}
 
 			string LF = Environment.NewLine;
@@ -187,7 +187,7 @@ namespace InputResender.Variants.InputProcessing {
 			if ( WaitForRelease ) {
 				if ( parsed.Released.Value == 0 ) WaitForRelease = false;
 				if ( Verbose ) Owner.LogFcn?.Invoke ( $"Waiting for release ({(parsed.Released.Value == 0 ? "Is Released" : "Still waiting")})" );
-				return false;
+				return DHookManager.ConsumingStatus.Consume;
 			} else if ( parsed.IsAnyReleased ) {
 				if ( parsed.Released.Value != 0 ) WaitForRelease = true;
 				else if ( Verbose ) Owner.LogFcn?.Invoke ( $"Key pressed AND released, not waiting." );
@@ -213,23 +213,23 @@ namespace InputResender.Variants.InputProcessing {
 				switch ( State ) {
 				case StateType.Normal:
 					switch ( mapping[0][LastTapCombo].key ) {
-					case KeyCode.CapsLock: State = StateType.Shift; LastTapCombo.Reset (); return false;
-					case KeyCode.NoName: State = StateType.Switch; LastTapCombo.Reset (); return false;
+					case KeyCode.CapsLock: State = StateType.Shift; LastTapCombo.Reset (); return DHookManager.ConsumingStatus.Consume;
+					case KeyCode.NoName: State = StateType.Switch; LastTapCombo.Reset (); return DHookManager.ConsumingStatus.Consume;
 					}
 					mapID = Presses;
 					break;
 				case StateType.Shift:
 					switch ( mapping[0][LastTapCombo].key ) {
-					case KeyCode.CapsLock: State = StateType.Normal; LastTapCombo.Reset (); return false;
-					case KeyCode.NoName: State = StateType.Switch; LastTapCombo.Reset (); return false;
+					case KeyCode.CapsLock: State = StateType.Normal; LastTapCombo.Reset (); return DHookManager.ConsumingStatus.Consume;
+					case KeyCode.NoName: State = StateType.Switch; LastTapCombo.Reset (); return DHookManager.ConsumingStatus.Consume;
 					default: State = StateType.Normal ; break;
 					}
 					mapID = 3;
 					break;
 				case StateType.Switch:
 					switch ( mapping[0][LastTapCombo].key ) {
-					case KeyCode.CapsLock: State = StateType.Switch; LastTapCombo.Reset (); return false;
-					case KeyCode.NoName: State = StateType.Normal; LastTapCombo.Reset (); return false;
+					case KeyCode.CapsLock: State = StateType.Switch; LastTapCombo.Reset (); return DHookManager.ConsumingStatus.Consume;
+					case KeyCode.NoName: State = StateType.Normal; LastTapCombo.Reset (); return DHookManager.ConsumingStatus.Consume;
 					}
 					mapID = 4;
 					break;
@@ -249,10 +249,10 @@ namespace InputResender.Variants.InputProcessing {
 					FireCallback ( LastRet.Clone<InputData> () );
 					FireCallback ( LastRet.Clone<InputData> () );
 				}
-				return false;
+				return DHookManager.ConsumingStatus.Consume;
 			} else {
 				if ( Verbose ) Owner.LogFcn?.Invoke ( $"No key released, skipping." );
-				return false;
+				return DHookManager.ConsumingStatus.Consume;
 			}
 		}
 

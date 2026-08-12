@@ -167,20 +167,11 @@ public class PipelineCommand : DCommand_CoreBase {
 		return ret;
 	}
 
-	static ComponentSelector CreateSelector ( string name, string spec, CoreBase core ) {
+	public static ComponentSelector CreateSelector ( string name, string spec, CoreBase core ) {
 		switch ( name ) {
 		case "origin": return new (core, variantName: "origin", autoAssert: false); // Origin doesn't exist, is filled by pipeline manager
 		case "exact":  return new (core, variantName: spec, autoAssert: false); // Caller
 		case "id": return new (core, id: DictionaryKey.Parse ( spec ) );
-		case "def":
-		case "definition": {
-			Type t = core.Fetch ( typeName: name )?.GetType ();
-			if ( t == null ) throw new ArgumentException ( $"Component '{name}' not found in core." );
-			while ( t.BaseType != typeof(ComponentBase) )
-				t = t.BaseType ?? throw new ArgumentException ( $"Component '{name}' does not inherit from ComponentBase." );
-
-			return new (core, componentType: t);
-		}
 		case "reflection": {
 			Type t = Type.GetType ( spec );
 			if ( t == null ) throw new ArgumentException ( $"Type '{spec}' not found." );
@@ -189,11 +180,30 @@ public class PipelineCommand : DCommand_CoreBase {
 				? throw new ArgumentException ( $"Type '{spec}' does not inherit from ComponentBase." )
 				: new (core, componentType: t, autoAssert: false); // If component had exist at time of creation, other method would be used.
 		}
-		default: {
+		case "var":
+		case "variant": {
 			var comp = core.Fetch ( typeName: name );
 			return comp == null
 				? throw new ArgumentException ( $"Component '{name}' not found in core." )
 				: new ComponentSelector ( core, componentType: comp.GetType () );
+		}
+		case "def":
+		case "definition": {
+			var comp = core.Fetch ( typeName: name );
+			if ( comp == null ) throw new ArgumentException ( $"Component '{name}' not found in core." );
+			TypeTree t = new (comp);
+			return new ( core, componentType: t.Definition );
+		}
+		default: {
+			var comp = core.Fetch ( typeName: name );
+			if ( comp == null ) throw new ArgumentException ( $"Component '{name}' not found in core." );
+			TypeTree t = new (comp);
+			var types = t.ToArray_VariantFirst ();
+			foreach (var type in types) {
+				if (type.Name == name || type.FullName == name)
+					return new (core, componentType: type);
+			}
+			throw new ArgumentException ( $"Component '{name}' not found in core." );
 		}
 		}
 	}

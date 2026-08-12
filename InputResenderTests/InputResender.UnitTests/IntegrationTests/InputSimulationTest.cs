@@ -202,7 +202,7 @@ public abstract class InputSimulationTest : BaseIntegrationTest {
 		var ke = e as HKeyboardEventDataHolder;
 		if ( press ) ke.Pressed.Should ().BeGreaterThanOrEqualTo ( 1 );
 		else ke.Pressed.Should ().BeLessThan ( 1 );
-		e.InputCode.Should ().Be ( (int)key );
+		((KeyCode)e.InputCode).Should ().Be ( key );
 	}
 
 	public static void AssertProbe (ProbeHook probe, int pos, KeyCode key, VKChange change) {
@@ -212,9 +212,9 @@ public abstract class InputSimulationTest : BaseIntegrationTest {
 		e.Item3.Should ().Be ( key );
 	}
 
-	private bool TestHook ( HInputEventDataHolder e ) {
+	private DHookManager.ConsumingStatus TestHook ( HInputEventDataHolder e ) {
 		hookCaptures.Add ( e );
-		return false; // False means that input event should be consumed instead of resending to another hook
+		return DHookManager.ConsumingStatus.Consume;
 	}
 }
 
@@ -236,9 +236,9 @@ class TestStatus {
 		InputManagementService.ClearNotificationLog ();
 	}
 
-	private bool TestHook ( HInputEventDataHolder e ) {
+	private DHookManager.ConsumingStatus TestHook ( HInputEventDataHolder e ) {
 		HookCaptures.Item1.Add ( e );
-		return false; // False means that input event should be consumed instead of resending to another hook
+		return DHookManager.ConsumingStatus.Consume;
 	}
 
 	KeyCode Key => keys[index % KN];

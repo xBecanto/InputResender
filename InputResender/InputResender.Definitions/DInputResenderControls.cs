@@ -24,7 +24,7 @@ namespace InputResender.Definitions {
 		// target set <IP4:Port>
 		//public abstract void ChangeTarget ( string EPss );
 		public abstract void ChangeHookStatus ( HHookInfo hookInfo, bool active );
-		public abstract bool HookShouldResend { set; protected get; }
+		public abstract DHookManager.ConsumingStatus HookShouldResend { set; protected get; }
 		public abstract bool Receiving { get; set; }
 		public abstract Action<InputData> ReceiveCallback { set; }
 		public Action<string> Log { get; set; }
@@ -49,7 +49,7 @@ namespace InputResender.Definitions {
 		}
 
 		public override int ComponentVersion => 1;
-		public override bool HookShouldResend { set; protected get; }
+		public override DHookManager.ConsumingStatus HookShouldResend { set; protected get; }
 
 		/*public override void ChangePassword ( string password ) {
 			Owner.DataSigner.Key = Owner.DataSigner.GenerateIV ( System.Text.Encoding.UTF8.GetBytes ( password ) );
@@ -102,7 +102,7 @@ namespace InputResender.Definitions {
 					hookIDs = null;
 				}*/
 		}
-		private bool HookFastCallback ( DictionaryKey key, HInputEventDataHolder inputData ) => HookShouldResend;
+		private DHookManager.ConsumingStatus HookFastCallback ( DictionaryKey key, HInputEventDataHolder inputData ) => HookShouldResend;
 		private void HookCallback ( DictionaryKey key, HInputEventDataHolder inputData ) {
 			var inputCombination = Owner.InputMerger.ProcessInput ( inputData );
 			Owner.InputProcessor.ProcessInput ( inputCombination );

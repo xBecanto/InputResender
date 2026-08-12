@@ -20,7 +20,7 @@ namespace InputResender.Definitions.InputProcessing {
 		/// <param name="hookInfo">Use given info to initialize hook(s). Fills back info about created hooks (e.g. hookIDs).</param>
 		/// <param name="mainCB">Fast callback that is called immediately after input event is recieved. Return value indicates if event should be passed to other hooks (true) or should be consumed (false)</param>
 		/// <param name="delayedCB">Use this callback for more time-consuming processing. It is called from separate task to avoid blocking input processing, but thread safety can not be guaranteed</param>
-		public abstract IDictionary<VKChange, DictionaryKey> SetupHook ( HHookInfo hookInfo, Func<DictionaryKey, HInputEventDataHolder, bool> mainCB, Action<DictionaryKey, HInputEventDataHolder> delayedCB );
+		public abstract IDictionary<VKChange, DictionaryKey> SetupHook ( HHookInfo hookInfo, Func<DictionaryKey, HInputEventDataHolder, DHookManager.ConsumingStatus> mainCB, Action<DictionaryKey, HInputEventDataHolder> delayedCB );
 		public abstract int ReleaseHook ( HHookInfo hookInfo );
 		/// <summary></summary>
 		/// <returns>Returns number of successfully simulated events</returns>
@@ -48,10 +48,10 @@ namespace InputResender.Definitions.InputProcessing {
 
 		struct LocHookInfo {
 			public DictionaryKey Key;
-			public Func<DictionaryKey, HInputEventDataHolder, bool> MainCB;
+			public Func<DictionaryKey, HInputEventDataHolder, DHookManager.ConsumingStatus> MainCB;
 			public Action<DictionaryKey, HInputEventDataHolder> DelayedCB;
 
-			public LocHookInfo ( DictionaryKey key, Func<DictionaryKey, HInputEventDataHolder, bool> mainCB, Action<DictionaryKey, HInputEventDataHolder> delayedCB ) { Key = key; MainCB = mainCB; DelayedCB = delayedCB; }
+			public LocHookInfo ( DictionaryKey key, Func<DictionaryKey, HInputEventDataHolder, DHookManager.ConsumingStatus> mainCB, Action<DictionaryKey, HInputEventDataHolder> delayedCB ) { Key = key; MainCB = mainCB; DelayedCB = delayedCB; }
 			public override string ToString () => $"{Key} => {MainCB.Method.AsString ()}...{DelayedCB.Method.AsString ()}";
 		}
 
@@ -63,7 +63,7 @@ namespace InputResender.Definitions.InputProcessing {
 		public override int ComponentVersion => 1;
 
 		public override int ReleaseHook ( HHookInfo hookInfo ) { return CallbackList.Remove ( hookInfo ) ? 1 : 0; }
-		public override IDictionary<VKChange, DictionaryKey> SetupHook ( HHookInfo hookInfo, Func<DictionaryKey, HInputEventDataHolder, bool> mainCB, Action<DictionaryKey, HInputEventDataHolder> delayedCB = null ) {
+		public override IDictionary<VKChange, DictionaryKey> SetupHook ( HHookInfo hookInfo, Func<DictionaryKey, HInputEventDataHolder, DHookManager.ConsumingStatus> mainCB, Action<DictionaryKey, HInputEventDataHolder> delayedCB = null ) {
 			var key = keyFactory.NewKey ();
 			CallbackList.Add ( hookInfo, new ( key, mainCB, delayedCB ) );
 			Dictionary<VKChange, DictionaryKey> ret = new ();

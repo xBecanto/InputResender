@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using InputResender.Services;
 using MdxLibs.Core;
@@ -32,13 +32,13 @@ namespace InputResender.Definitions.InputProcessing {
 			};
 
 		/// <inheritdoc cref="DHookManager.HookCallback"/>
-		public abstract bool ProcessInput ( HInputEventDataHolder[] inputCombination );
+		public abstract DHookManager.ConsumingStatus ProcessInput ( HInputEventDataHolder[] inputCombination );
 		private Action<InputData> callback;
 		public Action<InputData> Callback { set { callback = value; } protected get => callback ?? Owner.Fetch<DCommandWorker> ().Push; }
 
-		protected void FireCallback ( InputData data ) {
+		protected void FireCallback ( InputData data, ComponentSelector target = null ) {
 			Callback?.Invoke ( data );
-			DComponentJoiner.TrySend ( this, null, data );
+			DComponentJoiner.TrySend ( this, target, data );
 		}
 
 		private Dictionary<KeyCode, (InputData.Modifier mod, bool system)> ModifiersDict;
@@ -99,8 +99,8 @@ namespace InputResender.Definitions.InputProcessing {
 
 		public override int ComponentVersion => 1;
 
-		public override bool ProcessInput ( HInputEventDataHolder[] inputCombination ) {
-			if ( inputCombination == null || inputCombination.Length == 0 ) return false;
+		public override DHookManager.ConsumingStatus ProcessInput ( HInputEventDataHolder[] inputCombination ) {
+			if ( inputCombination == null || inputCombination.Length == 0 ) return DHookManager.ConsumingStatus.Error;
 			var firstEvent = inputCombination[0];
 			Callback?.Invoke ( new InputData ( this ) {
 				Cmnd = firstEvent.Pressed >= 1 ? InputData.Command.KeyPress : InputData.Command.KeyRelease,
@@ -108,7 +108,7 @@ namespace InputResender.Definitions.InputProcessing {
 				Key = (KeyCode)firstEvent.InputCode,
 				DeviceID = firstEvent.HookInfo.DeviceID
 			} );
-			return false;
+			return DHookManager.ConsumingStatus.Consume;
 		}
 
 		public override StateInfo Info => new VStateInfo ( this );

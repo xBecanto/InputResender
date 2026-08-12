@@ -106,14 +106,14 @@ public class VHookManager : DHookManager {
 		return ret;
 	}
 
-	private bool FastCB ( DictionaryKey key, HInputEventDataHolder e ) {
-		if ( !Callbacks.TryGetValue ( (e.HookInfo.DeviceID, CBType.Fast), out var cbs ) ) return true; // no callback of this type, pass to another callback
-		foreach ( var cb in cbs ) if ( !cb.callback ( e ) ) return false;
-		return true;
+	private ConsumingStatus FastCB ( DictionaryKey key, HInputEventDataHolder e ) {
+		if ( !Callbacks.TryGetValue ( (e.HookInfo.DeviceID, CBType.Fast), out var cbs ) ) return ConsumingStatus.Skip; // no callback of this type, pass to another callback
+		foreach ( var cb in cbs ) if ( cb.callback ( e ) == ConsumingStatus.Consume ) return ConsumingStatus.Consume;
+		return ConsumingStatus.Skip;
 	}
 	private void DelayedCB ( DictionaryKey key, HInputEventDataHolder e ) {
 		if ( !Callbacks.TryGetValue ( (e.HookInfo.DeviceID, CBType.Delayed), out var cbs ) ) return;
-		foreach ( var cb in cbs ) if ( !cb.callback ( e ) ) return;
+		foreach ( var cb in cbs ) if ( cb.callback ( e ) == ConsumingStatus.Consume ) return;
 	}
 
 	public override ComponentUIParametersInfo GetUIDescription () {

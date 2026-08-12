@@ -52,6 +52,8 @@ public class InputCommandsLoader : DCommandLoader_IRCore {
 		{ typeof(ScriptedInputProcessorCommand), ( core ) => new ScriptedInputProcessorCommand ( core ) },
 		{ typeof(VTapperInputCommand), ( core ) => new VTapperInputCommand ( core ) },
 		{ typeof(VTapperLearner), ( core ) => new VTapperLearner ( core ) },
+		{ typeof(VInputProcessorCommand), ( core ) => new VInputProcessorCommand ( core ) },
+
 	};
 	protected override Dictionary<Type, Func<DInputResenderCore, DCommand_CoreBase>> NewCommands_IR => NewCommandList;
 }

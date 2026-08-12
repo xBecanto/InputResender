@@ -74,10 +74,10 @@ namespace InputResender.DefinitionTests.InputProcessing {
 			if ( !shouldReceiveEvent ) EventList.Should ().HaveCount ( 0 );
 		}
 
-		protected virtual bool SimpleTestCallback ( DictionaryKey hookKey, HInputData inputData ) {
+		protected virtual DHookManager.ConsumingStatus SimpleTestCallback ( DictionaryKey hookKey, HInputData inputData ) {
 			EventList.Add ( inputData );
 			onInputReceived.Set ();
-			return false;
+			return DHookManager.ConsumingStatus.Consume;
 		}
 
 		private void FetchHLData ( out HInputData[] HLData, out uint dataCnt, out int dataSize ) {

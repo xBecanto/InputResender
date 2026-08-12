@@ -142,7 +142,7 @@ namespace InputResender.Windows.Input {
 			return ret;
 		}
 
-		public override IDictionary<VKChange, Hook>SetHookEx ( HHookInfo hookInfo, Func<DictionaryKey, HInputData, bool> callback ) {
+		public override IDictionary<VKChange, Hook>SetHookEx ( HHookInfo hookInfo, Func<DictionaryKey, HInputData, DHookManager.ConsumingStatus> callback ) {
 			var vkTypeDict = SortVKChangeByType ( hookInfo.ChangeMask );
 
 			Dictionary<VKChange, Hook> ret = new ();

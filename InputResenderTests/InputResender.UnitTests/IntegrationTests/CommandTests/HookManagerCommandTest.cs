@@ -18,7 +18,7 @@ public class TestableHookManagerCommand ( DInputResenderCore owner ) : HookManag
 		GetRegisteredCallbacks ()
 		=> RegisteredCallbacks;
 
-	private bool ExecCallback ( DHookManager.CBType cbtype, KeyCode keyCode, VKChange vkChange ) {
+	private DHookManager.ConsumingStatus ExecCallback ( DHookManager.CBType cbtype, KeyCode keyCode, VKChange vkChange ) {
 		var hookManager = GetComp ( Owner, cbtype, 0 );
 		var inputEvent = new HKeyboardEventDataHolder ( hookManager
 			, new HHookInfo ( hookManager, 0, vkChange )
@@ -28,11 +28,16 @@ public class TestableHookManagerCommand ( DInputResenderCore owner ) : HookManag
 		return hookManager.HookCallback ( inputEvent );
 	}
 
+	void AssertConsumingStatus  ( DHookManager.CBType cbtype, KeyCode keyCode, VKChange vkChange, DHookManager.ConsumingStatus consumingStatus )
+	=> ExecCallback ( cbtype, keyCode, vkChange ).Should ().Be ( consumingStatus );
 	public void AssertPassthrough ( DHookManager.CBType cbtype, KeyCode keyCode, VKChange vkChange )
-		=> ExecCallback ( cbtype, keyCode, vkChange ).Should ().BeTrue ();
-
+		=> AssertConsumingStatus ( cbtype, keyCode, vkChange, DHookManager.ConsumingStatus.Passthrough );
 	public void AssertConsume ( DHookManager.CBType cbtype, KeyCode keyCode, VKChange vkChange )
-		=> ExecCallback ( cbtype, keyCode, vkChange ).Should ().BeFalse ();
+		=> AssertConsumingStatus ( cbtype, keyCode, vkChange, DHookManager.ConsumingStatus.Consume );
+	public void AssertSkip ( DHookManager.CBType cbtype, KeyCode keyCode, VKChange vkChange )
+		=> AssertConsumingStatus ( cbtype, keyCode, vkChange, DHookManager.ConsumingStatus.Skip );
+	public void AssertProcessError ( DHookManager.CBType cbtype, KeyCode keyCode, VKChange vkChange )
+		=> AssertConsumingStatus ( cbtype, keyCode, vkChange, DHookManager.ConsumingStatus.Error );
 
 	public SHookManager GetHookManagerForCore ( CoreBase core, DHookManager.CBType callbackType, int deviceID )
 		=> GetComp ( core, callbackType, deviceID );
@@ -85,11 +90,11 @@ public class HookManagerCommandTest : BaseIntegrationTest, IDisposable {
 		hookManager.FilterMap.Should ().ContainKey ( KeyCode.F2 );
 		hookManager.FilterMap.Should ().ContainKey ( KeyCode.F3 );
 
-		hookManager.FilterMap[KeyCode.Escape].Should ().BeTrue (); // consume
-		hookManager.FilterMap[KeyCode.Tab].Should ().BeTrue ();    // consume
-		hookManager.FilterMap[KeyCode.F1].Should ().BeFalse ();    // pass
-		hookManager.FilterMap[KeyCode.F2].Should ().BeFalse ();    // pass
-		hookManager.FilterMap[KeyCode.F3].Should ().BeFalse ();    // pass
+		hookManager.FilterMap[KeyCode.Escape].Should ().Be (DHookManager.ConsumingStatus.Consume); // consume
+		hookManager.FilterMap[KeyCode.Tab].Should ().Be (DHookManager.ConsumingStatus.Consume);    // consume
+		hookManager.FilterMap[KeyCode.F1].Should ().Be (DHookManager.ConsumingStatus.Passthrough);    // pass
+		hookManager.FilterMap[KeyCode.F2].Should ().Be (DHookManager.ConsumingStatus.Passthrough);    // pass
+		hookManager.FilterMap[KeyCode.F3].Should ().Be (DHookManager.ConsumingStatus.Passthrough);    // pass
 	}
 
 	/*[Fact]
@@ -135,7 +140,7 @@ public class HookManagerCommandTest : BaseIntegrationTest, IDisposable {
 		AssertExec ( "auto add testGroup ((print \"TestGroup triggered!\"))", "Added 1 command to group 'testGroup'." );
 
 		testableCommand.AssertConsume ( FAST, KeyCode.W, VKChange.KeyDown );
-		testableCommand.AssertPassthrough ( FAST, KeyCode.Z, VKChange.KeyDown );
+		testableCommand.AssertSkip ( FAST, KeyCode.Z, VKChange.KeyDown );
 	}
 
 	[Fact]
@@ -146,17 +151,18 @@ public class HookManagerCommandTest : BaseIntegrationTest, IDisposable {
 
 		testableCommand.AssertConsume ( FAST, KeyCode.Escape, VKChange.KeyDown ); // Filter - consume
 		testableCommand.AssertPassthrough ( FAST, KeyCode.F1, VKChange.KeyDown ); // FIlter - pass
-		testableCommand.AssertPassthrough ( FAST, KeyCode.Z, VKChange.KeyDown ); // Ignored
+		testableCommand.AssertSkip ( FAST, KeyCode.Z, VKChange.KeyDown ); // Ignored
 	}
 
 	[Fact]
-	public void TestDelayedCallbackPassesThrough () {
+	public void TestDelayedCallbackAlwaysSkips () {
+		// Filter applies only to 'Fast' as during 'Delayed' it was already consumed/passed over
 		AssertExecByRegex ( "hook add delayed Filter keydown", HookAddRegex ( "Delayed", "Filter", "KeyDown" ) );
 		AssertExec ( "hook filter delayed consume Escape", "Filter configured to consume 1 keys: Escape." );
 
 		var hookManager = testableCommand.GetHookManagerForCore ( Core, DELAYED, 0 );
 		hookManager.AssignedCallbackType.Should ().Be ( DELAYED );
-		testableCommand.AssertPassthrough ( DELAYED, KeyCode.Escape, VKChange.KeyDown );
+		testableCommand.AssertSkip ( DELAYED, KeyCode.Escape, VKChange.KeyDown );
 	}
 
 	[Fact]
@@ -242,8 +248,8 @@ public class HookManagerCommandTest : BaseIntegrationTest, IDisposable {
 			VKChange.KeyDown
 		);
 
-		bool fastResult = fastHookManager.HookCallback ( escapeEvent );
-		fastResult.Should ().BeFalse ();
+		DHookManager.ConsumingStatus fastResult = fastHookManager.HookCallback ( escapeEvent );
+		fastResult.Should ().Be ( DHookManager.ConsumingStatus.Consume );
 	}
 
 	[Fact]

@@ -213,6 +213,23 @@ namespace MdxLibs.Core {
 			, ComponentGroup.ByType ( typeName )
 			).Get ();
 
+		public ComponentBase[] FetchAll (
+			Type t = null
+			, string name = null
+			, DictionaryKey subGroupID = default
+			, string variantName = null
+			, Type acceptedType = null
+			, string typeName = null
+		)
+			=> new ComponentGroup ( this
+				, ComponentGroup.ByType ( t )
+				, ComponentGroup.ByName ( name )
+				, ComponentGroup.BySubGroupID ( subGroupID )
+				, ComponentGroup.ByVariantName ( variantName )
+				, ComponentGroup.ByAcceptedType ( acceptedType )
+				, ComponentGroup.ByType ( typeName )
+			).GetComponents ();
+
 
 		public bool IsRegistered ( ComponentBase comp ) {
 			foreach ( var val in Components ) if ( val.Value.Component == comp ) return true;
@@ -317,6 +334,17 @@ namespace MdxLibs.Core {
 			return null;
 		}
 		public T Fetch<T> ( CoreBase core ) where T : ComponentBase => Fetch ( core ) as T;
+		public ComponentBase[] FetchAll (CoreBase core) {
+			if ( ID != null ) return [core[ID.Value]];
+			if ( ComponentType != null ) return core.FetchAll ( t: ComponentType );
+			if ( VariantName != null ) return core.FetchAll ( variantName: VariantName );
+			return [];
+		}
+
+		public bool IsUnique ( CoreBase core ) => FetchAll ( core ).Length == 1;
+
+		// Not very efficient but works so far
+		public bool Fits ( ComponentBase comp ) => FetchAll ( comp.Owner ).Contains ( comp );
 
 		public override string ToString () {
 			List<string> dsc = new ();
@@ -324,6 +352,12 @@ namespace MdxLibs.Core {
 			if ( ComponentType != null ) dsc.Add ( $"Type: {ComponentType.Name}" );
 			if ( VariantName != null ) dsc.Add ( $"Variant: {VariantName}" );
 			return $"<{string.Join ( ", ", dsc )}>";
+		}
+
+		public override int GetHashCode () => (ID?.GetHashCode () ?? 0) ^ (ComponentType?.GetHashCode () ?? 0) ^ (VariantName?.GetHashCode () ?? 0);
+		public override bool Equals ( object obj ) {
+			if ( obj is not ComponentSelector other ) return false;
+			return ID == other.ID && ComponentType == other.ComponentType && VariantName == other.VariantName;
 		}
 	}
 
@@ -354,7 +388,7 @@ namespace MdxLibs.Core {
 			types = ret.ToArray ();
 		}
 
-		public TypeTree (ComponentBase comp) : this ( comp.GetType () ) { }
+		public TypeTree (ComponentBase comp) : this ( comp?.GetType () ) { }
 
 		public bool IsOfType ( Type t ) => types.Contains ( t );
 		public bool IsOfType ( string name ) => types.Any ( ( t ) => t.Name.EndsWith ( name ) );

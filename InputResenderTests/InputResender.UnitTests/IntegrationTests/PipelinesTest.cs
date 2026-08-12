@@ -65,7 +65,7 @@ public class PipelinesTest {
 	public void Process_Send_Simulate_Pipeline () {
 		var joiner = FetchJoiner ( sender );
 		joiner.RegisterJoiner ( typeof ( DInputProcessor ), typeof ( DDataSigner ),
-			"Overloaded InputProcessor<InputData> to DataSigner (for testing)", ( j, obj ) => {
+			"Overloaded InputProcessor<InputData> to DataSigner (for testing)", ( j, bSel, obj ) => {
 			// This joiner will change keyDown to keyUp and vise versa
 			// This is to 1) illustrate the option to overwrite joiner with some logic
 			//   and 2) to separate hooks for sender and receiver in this test
@@ -97,7 +97,7 @@ public class PipelinesTest {
 			lock ( sentCaptures ) {
 				sentCaptures.Add ( data );
 			}
-			return false;
+			return DHookManager.ConsumingStatus.Consume;
 		} );
 		sender.AssertExecByRegex ( "hook add Delayed -c Fcn KeyDown"
 			, InputSimulationTest.HookAddRegex ( "KeyDown", DHookManager.CBType.Delayed, "Fcn" )
@@ -120,7 +120,7 @@ public class PipelinesTest {
 				receiverHookWaiter.Set ();
 				stackTrace.Add ( (data, new StackTrace ()) );
 			}
-			return false;
+			return DHookManager.ConsumingStatus.Consume;
 		} );
 		receiver.AssertExecByRegex ( "hook add delayed -c Fcn KeyUp", InputSimulationTest.HookAddRegex ( "KeyUp", DHookManager.CBType.Delayed, "Fcn" ), "No hooks added." );
 		BaseIntegrationTest.ConsumeMessages ();

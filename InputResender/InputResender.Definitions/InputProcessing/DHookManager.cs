@@ -7,8 +7,8 @@ using MdxLibs.Services;
 namespace InputResender.Definitions.InputProcessing;
 public abstract class DHookManager : ComponentBase_CoreBase {
 	public enum CBType { Fast, Delayed }
-	/// <summary>Callback for hooks. Should return true if event should be passed to other hooks, false if it should be consumed.</summary>
-	public delegate bool HookCallback ( HInputEventDataHolder data );
+	public enum ConsumingStatus { Consume, Passthrough, Skip, Error }
+	public delegate ConsumingStatus HookCallback ( HInputEventDataHolder data );
 
 	public override int ComponentVersion => 1;
 	public override StateInfo Info => null;
@@ -26,7 +26,7 @@ public abstract class DHookManager : ComponentBase_CoreBase {
 	public abstract HHookInfo GetHook ( int device, VKChange vkChange );
 	public abstract void ClearHooks ( int device = 0 );
 	public abstract Dictionary<int, DictionaryKey> ListHooks ();
-	/// <summary>Register callback for all active hooks (in this manager) for given device. Callback should return true if event should be passed to other hooks, false if it should be consumed.</summary>
+	/// <summary>Register callback for all active hooks (in this manager) for given device.</summary>
 	public abstract HCallbackHolder<HookCallback> AddCallback ( CBType cbType, int device = -1 );
 	public virtual int Verbosity { get; set; } = 0;
 }

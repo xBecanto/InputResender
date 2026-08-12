@@ -45,11 +45,11 @@ public class VInputReader_KeyboardHook : DInputReader {
 
 	public struct HLHookInfo {
 		public Hook hook;
-		public Func<DictionaryKey, HInputEventDataHolder, bool> MainCallback;
+		public Func<DictionaryKey, HInputEventDataHolder, DHookManager.ConsumingStatus> MainCallback;
 		public Action<DictionaryKey, HInputEventDataHolder> DelayedCB;
 		public Queue<(DictionaryKey, HInputEventDataHolder)> MessageQueue;
 
-		public HLHookInfo ( Hook nHook, Func<DictionaryKey, HInputEventDataHolder, bool> mainCallback, Action<DictionaryKey, HInputEventDataHolder> delayedCB ) {
+		public HLHookInfo ( Hook nHook, Func<DictionaryKey, HInputEventDataHolder, DHookManager.ConsumingStatus> mainCallback, Action<DictionaryKey, HInputEventDataHolder> delayedCB ) {
 			hook = nHook;
 			MainCallback = mainCallback;
 			DelayedCB = delayedCB;
@@ -60,7 +60,7 @@ public class VInputReader_KeyboardHook : DInputReader {
 	public override int ComponentVersion => 1;
 	protected DLowLevelInput LowLevelComponent { get => Owner.Fetch<DLowLevelInput> (); }
 
-	public override IDictionary<VKChange, DictionaryKey> SetupHook ( HHookInfo hookInfo, Func<DictionaryKey, HInputEventDataHolder, bool> mainCB, Action<DictionaryKey, HInputEventDataHolder> delayedCB = null ) {
+	public override IDictionary<VKChange, DictionaryKey> SetupHook ( HHookInfo hookInfo, Func<DictionaryKey, HInputEventDataHolder, DHookManager.ConsumingStatus> mainCB, Action<DictionaryKey, HInputEventDataHolder> delayedCB = null ) {
 		var hooks = LowLevelComponent.SetHookEx ( hookInfo, LocalCallback );
 		var ret = new Dictionary<VKChange, DictionaryKey> ();
 
@@ -114,9 +114,9 @@ public class VInputReader_KeyboardHook : DInputReader {
 		return LowLevelComponent.SimulateInput ( 1, new HInputData[1] { LLData }, LLData.SizeOf, allowRecapture );
 	}
 
-	private bool LocalCallback ( DictionaryKey hookKey, HInputData inputData ) {
+	private DHookManager.ConsumingStatus LocalCallback ( DictionaryKey hookKey, HInputData inputData ) {
 		var inputEventDataHolder = LowLevelComponent.GetHighLevelData ( hookKey, this, inputData );
-		bool willResend = true;
+		DHookManager.ConsumingStatus willResend = DHookManager.ConsumingStatus.Skip;
 		if ( HookSet.TryGetValue ( hookKey, out var hookRef ) ) {
 			lock (delayedRunner) {
 				if ( hookRef.Item2.MainCallback != null ) willResend = hookRef.Item2.MainCallback ( hookKey, inputEventDataHolder );
