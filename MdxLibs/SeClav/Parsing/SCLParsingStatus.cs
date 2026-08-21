@@ -138,8 +138,10 @@ internal class SCLParsingStatus {
 	public HashSet<string> PossibleCommands = [];
 	public bool ReplaceNonexistingJumpsWithNOPs = false;
 	//readonly List<Action<SCLParsedScript>> OnLoad = [];
+	public readonly TArg VoidID;
 
 	readonly Dictionary<string, DataTypeDefinition> dataTypeMap = [];
+	readonly Dictionary<Type, DataTypeDefinition> metaTypeMap = [];
 	readonly Dictionary<string, HashSet<ICommand>> commandMap = [];
 	readonly Dictionary<string, IMacro> macros = [];
 	readonly Dictionary<string, PraeDirective> praeDirectives = [];
@@ -160,6 +162,9 @@ internal class SCLParsingStatus {
 		dataTypeMap["void"] = new SCLT_Void ();
 		dataTypes.Add ( dataTypeMap["void"] );
 		results.Add ( new SCLT_Void.VoidData ( dataTypes[0] as SCLT_Void ) );
+		metaTypeMap.Add ( typeof(SCLT_Any), new SCLT_Any () );
+		metaTypeMap.Add ( typeof(SCLT_Same), new SCLT_Same () );
+		VoidID = SCLInterpreter.CrArgRes ( 0 );
 	}
 
 	private void PushCmd ( string name, ICommand cmd ) {
@@ -287,9 +292,11 @@ internal class SCLParsingStatus {
 		return commands.IndexOf ( cmd );
 	}
 
-	private void TranslateDataType (ref DataTypeDefinition dataType) {
+	internal void TranslateDataType (ref DataTypeDefinition dataType) {
 		if ( dataTypeMap.TryGetValue ( dataType.Name, out var existing ) )
 			dataType = existing;
+		else if ( metaTypeMap.TryGetValue ( dataType.GetType (), out var existingMeta ) )
+			dataType = existingMeta;
 		else throw new SCLParsingException ( $"Data type '{dataType.Name}' is not registered." );
 		if (!dataTypes.Contains ( dataType ) )
 			dataTypes.Add ( dataType );
@@ -304,7 +311,9 @@ internal class SCLParsingStatus {
 		ArgumentNullException.ThrowIfNull ( cmd );
 		if ( id < 0 || id >= cmd.ArgC )
 			throw new ArgumentOutOfRangeException ( nameof ( id ), $"Command '{cmd.CmdCode}' ({cmd.CommonName}) has only {cmd.ArgC} arguments, index {id} is out of range." );
-		return GetDataType ( cmd.Args[id].type.Name );
+		var ret = GetDataType ( cmd.Args[id].type.Name );
+		ret ??= metaTypeMap.GetValueOrDefault ( cmd.Args[id].type.GetType (), null );
+		return ret;
 	}
 
 	public int GetDataTypeID ( DataTypeDefinition dataType ) {

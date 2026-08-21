@@ -31,6 +31,8 @@ namespace InputResender.Variants.InputProcessing;
 		};
 
 		public IReadOnlyDictionary<string, PraeDirective> PraeDirectives => new Dictionary<string, PraeDirective> () { };
+
+		public IReadOnlyDictionary<string, IReadOnlySet<string>> AltNames => new Dictionary<string, IReadOnlySet<string>> { };
 	}
 
 	public class SCL_StatusTypeDef : SeClav.DataTypeDefinition {

@@ -132,26 +132,55 @@ public class SCLIntegrationTests {
 	}
 
 
-	private TVal TestAltNames<TDef, TVal> ( string typeName, string arg1, string arg2, string expected )
+	private TVal TestCmdExec<TDef, TVal> ( string typeName, string cmd )
 		where TDef : DataTypeDefinition where TVal : IDataType {
-		parser.ProcessLine ( $"{typeName} myVar = + {arg1} {arg2}" );
+		parser.ProcessLine ( $"{typeName} myVar = {cmd}" );
 		var assertionRuntime = RunScript ( true );
 		var (_, Var) = assertionRuntime.VarExists<TDef, TVal> ( "myVar" );
 		return Var;
 	}
 
 	[Theory]
-	[InlineData ( "\"Hello,\"", "\" World!\"", "Hello, World!" )]
-	[InlineData ( "\"The answer is: \"", "42", "The answer is: 42" )]
-	public void AltNamesForCommands_Str ( string arg1, string arg2, string expected )
-		=> TestAltNames<TestValueStringDef, TestValueString> ( "TestString", arg1, arg2, expected )
-			.Value.Should ().Be ( expected );
+	[InlineData ( 0, "\"Hello,\"", "\" World!\"", "Hello, World!" )] // Concat 2 . . .
+	[InlineData ( 1, "\"The answer\" \" is: \"", "\"42\"", "The answer is: 42" )] // Concat 3 . . .
+	[InlineData ( 2, 40, 2, 42 )] // Add 2 . . .
+	[InlineData ( 3, "\"The answer is: \"", 42, "The answer is: 42" )] // Append int to string . . .
+	[InlineData ( 4, "\"Hello, \" \"Ugly\"", "+ \" and \" \"Cruel\" \" World!\"", "Hello, Ugly and Cruel World!" )] // Alt command instead of arg . . .
+	[InlineData ( 5, "30", "+ 10 2", 42 )] // Alt command instead of arg for ADD . . .
+	[InlineData ( 6, "\"42 + 25 = \"", "\"67\"", "42 + 25 = 67" )] // Alt token inside of arg (CONCAT_STR) . . .
+	[InlineData ( 7, "\"42 + 25 = \"", "+ 42 25", "42 + 25 = 67" )] // Alt command inside of arg (APPEND_INT_TO_STR) . . .
+	public void AltNamesForCommands ( int ordNum, object arg1, object arg2, object expected ) {
+		switch ( expected ) {
+		case string s3:
+			TestCmdExec<TestValueStringDef, TestValueString> ( "TestString", $"+ {arg1} {arg2}" )
+				.Value.Should ().Be ( s3 );
+			break;
+		case int i3:
+			TestCmdExec<TestValueIntDef, TestValueInt> ( "TestInt", $"+ {arg1} {arg2}" )
+				.Value.Should ().Be ( i3 );
+			break;
+		default: throw new ArgumentException ( "Invalid argument types for TestCmdExec test." );
+		}
+	}
 
 	[Theory]
+	[InlineData ( "\"Hello,\"", "\" World!\"", "Hello, World!" )]
+	[InlineData ( "\"The answer is: \"", "42", "The answer is: 42" )]
 	[InlineData ( 40, 2, 42 )]
-	public void AltNamesForCommands_Int ( int arg1, int arg2, int expected )
-		=> TestAltNames<TestValueIntDef, TestValueInt> ( "TestInt", arg1.ToString (), arg2.ToString (), expected.ToString () )
-			.Value.Should ().Be ( expected );
+	public void InfixCommands ( object arg1, object arg2, object expected ) {
+		switch ( expected ) {
+		case string s3:
+			TestCmdExec<TestValueStringDef, TestValueString> ( "TestString", $"{arg1} + {arg2}" )
+				.Value.Should ().Be ( s3 );
+			break;
+		case int i3:
+			TestCmdExec<TestValueIntDef, TestValueInt> ( "TestInt", $"{arg1} + {arg2}" )
+				.Value.Should ().Be ( i3 );
+			break;
+		default: throw new ArgumentException ( "Invalid argument types for TestCmdExec test." );
+		}
+	}
+
 
 	[Theory]
 	[InlineData ( true )]

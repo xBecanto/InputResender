@@ -195,19 +195,21 @@ internal class ParsingContext {
 
 	public CmdArgInfo ParseArg ( ref string line, ParsingContext context, DataTypeDefinition expectedType, string errBase = $"Command '<name>' expects argument <id>" ) {
 		expectedType = context.Status.GetDataType ( expectedType.Name );
-		// Constant argument
-		if ( expectedType.TryParse ( ref line, out IDataType arg ) ) {
-			return new CmdArgInfo ( arg );
-		}
-
-		// Inter-result argument
-		if ( SubCommandParser.Parse ( line, context, out SubCommandParser subCommand ) ) {
+		if ( SubCommandParser.Parse ( line, context, out SubCommandParser subCommand, expectedType ) ) {
 			line = subCommand.RemainLine;
 			var interType = subCommand.Command.ReturnType;
 			interType = context.Status.GetDataType ( interType.Name );
 			if ( !interType.Equals ( expectedType ) )
 				throw new SCLCommandArgumentException ( $"{errBase} of type '{expectedType.Name}', but the command '{subCommand.Command.CmdCode}' ({subCommand.Command.CommonName}) returns type '{interType.Name}'.", line );
 			return new CmdArgInfo ( subCommand );
+		}
+		return ParseArg_NoCmd ( ref line, context, expectedType, errBase );
+	}
+
+	public CmdArgInfo ParseArg_NoCmd ( ref string line, ParsingContext context, DataTypeDefinition expectedType, string errBase = $"Command '<name>' expects argument <id>" ) {
+		// Constant argument
+		if ( expectedType.TryParse ( ref line, out IDataType arg ) ) {
+			return arg == null ? new (context.Status.VoidID) : new (arg);
 		}
 
 		string token = context.GetIdentifier ( ref line );
@@ -601,128 +603,11 @@ internal struct CmdArgInfo {
 	public CmdArgInfo ( IDataType constant ) { Constant = constant; }
 	public CmdArgInfo ( TArg varID ) { VariableID = varID; }
 	public CmdArgInfo ( SubCommandParser interCommand ) { InterCommand = interCommand; }
-}
 
-internal class SubCommandParser : SubParserBase {
-	public readonly string Name;
-	public readonly ushort FlagRequired;
-	public readonly ICommand Command;
-	private CmdArgInfo[] args;
-	public IReadOnlyList<CmdArgInfo> Args => args;
-	public TDst? Destination { get; private set; } = null;
-
-	private SubCommandParser ( ParsingContext context, string originalLine, string name, ICommand command, ushort flagRequired ) : base ( context, originalLine ) {
-		Name = name;
-		FlagRequired = flagRequired;
-		Command = command;
-
-		args = new CmdArgInfo[command.ArgC];
-	}
-
-	public static bool Parse ( string line, ParsingContext context, out SubCommandParser result ) {
-		result = null;
-		string originalLine = line;
-		ushort flagReq = ParsingContext.GetFlag ( ref line );
-		string token = null; // = context.GetIdentifier ( ref line );
-		foreach ( var cmdStart in context.Status.PossibleCommands ) {
-			if ( !line.StartsWith ( cmdStart )
-				|| (line.Length != cmdStart.Length && !char.IsWhiteSpace ( line[cmdStart.Length] )) )
-				continue;
-
-			token = cmdStart;
-			line = line[cmdStart.Length..].TrimStart ();
-			break;
-		}
-		token ??= context.GetIdentifier ( ref line );
-
-		if ( string.IsNullOrEmpty ( token ) ) return false;
-		HashSet<ICommand> cmdSet = context.Status.TryGetCommands ( token );
-		if ( cmdSet.Count == 0 ) return false;
-		List<(SubCommandParser, ICommand, string)> candidates = new ();
-		foreach ( ICommand cmd in cmdSet ) {
-			try {
-				result = new ( context, originalLine, token, cmd, flagReq );
-				string remLine = line;
-
-				if (cmd.Args.Count != cmd.ArgC)
-					throw new SCLParsingException ( $"Internal error: Command '{cmd.CmdCode}' argument count mismatch between ICommand definition and Args list.", originalLine );
-				for ( int i = 0; i < cmd.ArgC; i++ ) {
-					if ( cmd.Args[i].type is SCLT_Any ) {
-						result.args[i] = new CmdArgInfo ( SCLInterpreter.CrArgVar ( 1 ) ); // 'ANY' is requested. Corrently no better way to provide some 'placeholder' value.
-						remLine = string.Empty; // 'ANY' should probably consume the rest of the line.
-					} else {
-						var type = context.Status.GetDataType ( cmd, i );
-
-						result.args[i] = context.ParseArg ( ref remLine, context, type, $"Command '{result.Name}' expects argument {i + 1}" );
-					}
-				}
-				candidates.Add ( (result, cmd, remLine) );
-			} catch ( Exception _) {
-				// Try next candidate
-			}
-		}
-
-		for (int i = candidates.Count - 1; i >= 0; i--) {
-			if (candidates[i].Item3.Length > 0) candidates.RemoveAt(i);
-		}
-
-		switch ( candidates.Count ) {
-		case 0: throw new SCLCommandArgumentException ( $"Command '{token}' could not be matched with any of the available commands.", originalLine );
-		case > 1: throw new SCLCommandArgumentException ( $"Command '{token}' is ambiguous and matches multiple commands. Please specify the command more precisely.", originalLine );
-		default:
-			var (res, cmd, remLine) = candidates[0];
-			result = res;
-			result.RemainLine = remLine;
-			context.Status.ConfirmCommand ( result.Command );
-			return true;
-		}
-	}
-
-	public TDst TryRegisterResult () {
-		if (Command.ReturnType == null) throw new SCLCommandArgumentException ( $"Command '{Name}' does not have a return type.", OriginalLine );
-		if ( Destination != null ) throw new SCLCommandArgumentException ( $"Command '{Name}' result destination already registered.", OriginalLine );
-		return (Destination = Context.Status.RegisterResult ( Command.ReturnType )).Value;
-	}
-
-	public void SetDestination ( TDst dst ) {
-		if ( Destination != null ) throw new SCLCommandArgumentException ( $"Command '{Name}' destination already set.", OriginalLine );
-		Destination = dst;
-	}
-
-	public override void Apply () {
-		int N = args.Length;
-		TArg[] fArg = new TArg[N];
-		for ( int i = 0; i < N; i++ ) {
-			if ( args[i].Constant != null ) {
-				fArg[i] = Context.Status.AddConstant ( args[i].Constant );
-				AssertArg ( "constant" );
-			} else if ( args[i].VariableID != null ) {
-				fArg[i] = args[i].VariableID.Value;
-				AssertArg ( "variable" );
-			} else if ( args[i].InterCommand != null ) {
-				fArg[i] = SCLInterpreter.CrArgRes ( args[i].InterCommand.TryRegisterResult ().ValueId );
-				AssertArg ( "inter-command result" );
-				args[i].InterCommand.Apply ();
-			} else throw new SCLCommandArgumentException ( $"Argument {i + 1} for command '{Name}' is not properly set.", OriginalLine );
-
-			void AssertArg ( string argType ) {
-				if ( Context.Status.GetTypeOfVar ( fArg[i] ) == null )
-					throw new SCLCommandArgumentException ( $"Internal error: Argument {i + 1} for command '{Command.CmdCode}' could not resolve type of {argType} '{args[i]}'.", OriginalLine );
-			}
-		}
-
-		CmdCall call = new (
-			SCLInterpreter.CrOpCode ( Context.Status.GetCommandID ( Command ) ),
-			Destination.HasValue ? Destination.Value : SCLInterpreter.CrDst ( 0 ),
-			FlagRequired,
-			fArg
-			);
-		if ( Context.EnableLogging ) Context.LogAdd ( $"Pushing command '{Name}' with {N} argument(s)." );
-		Context.Status.PushCommand ( call );
+	public override string ToString () {
+		if ( Constant != null ) return $"'{Constant}'";
+		if ( VariableID != null ) return $"#{VariableID}";
+		if ( InterCommand != null ) return $"@{InterCommand.Command.CmdCode}";
+		return "Undefined";
 	}
 }
-
-
-
-
-

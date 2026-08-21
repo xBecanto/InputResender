@@ -8,7 +8,8 @@ public class SCLT_Any : DataTypeDefinition {
 	public override IReadOnlySet<ICommand> Commands => null;
 	public override bool TryParse ( ref string line, out IDataType result ) {
 		result = null;
-		return false;
+		line = string.Empty;
+		return true;
 	}
 	public override IDataType Default {
 		get => throw new InvalidOperationException ( "DataType Any is only Marker and cannot be used to hold data!" );
