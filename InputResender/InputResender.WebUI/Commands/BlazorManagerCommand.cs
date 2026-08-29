@@ -45,8 +45,10 @@ public class BlazorManagerCommand : DCommand_IRCore {
 				ipAddress = IPAddress.Loopback;
 			int port = context.Args.Int ( "--Port", "Port to bind to", false ).GetValueOrDefault ( 1648 );
 
+			try { webServer.StartServer ( new IPNetPoint ( ipAddress, port ), context.Args.Present ( "--Debug" ) ); }
+			catch ( System.Exception ex ) {
+				return new ErrorCommandResult ( new ( $"Failed to start Blazor server at {ipAddress}:{port}." ), ex );			}
 
-			webServer.StartServer ( new IPNetPoint ( ipAddress, port ), context.Args.Present ( "--Debug" ) );
 			return new CommandResult ( $"Blazor server started at {ipAddress}:{port}." );
 		}
 		case "stop": {

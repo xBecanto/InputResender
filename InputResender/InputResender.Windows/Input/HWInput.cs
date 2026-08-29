@@ -99,6 +99,9 @@ public struct HWInput : IInputLLValues {
 		case VKChange.KeyDown: Type = Keyboard; Data = new () { ki = new HWInput.KeyboardInput ( dataPtr ) }; break;
 		case VKChange.KeyUp: Type = Keyboard; Data = new () { ki = new HWInput.KeyboardInput ( dataPtr, true ) }; break;
 		case VKChange.MouseMove: Type = Mouse; Data = new () { mi = new HWInput.MouseInput ( dataPtr ) }; break;
+		// Ignoring the speciality of SysKeyDown and SysKeyUp for now, treating them as regular key events
+		case VKChange.SysKeyDown: Type = Keyboard; Data = new () { ki = new HWInput.KeyboardInput ( dataPtr ) }; break;
+		case VKChange.SysKeyUp: Type = Keyboard; Data = new () { ki = new HWInput.KeyboardInput ( dataPtr, true ) }; break;
 		default: throw new NotSupportedException ( $"Unsupported VKChange code: {vkChangeCode}" );
 		}
 	}

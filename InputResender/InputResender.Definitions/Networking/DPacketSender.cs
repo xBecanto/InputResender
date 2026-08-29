@@ -28,7 +28,9 @@ namespace InputResender.Definitions.Networking {
 				("remove_"+nameof(OnNewConn), typeof(void)),
 				("add_"+nameof(OnError), typeof(void)),
 				("remove_"+nameof(OnError), typeof(void)),
-				(nameof(GetEPInfo), typeof(string))
+				(nameof(GetEPInfo), typeof(string)),
+				("get_"+nameof(Verbosity), typeof(int)),
+				("set_"+nameof(Verbosity), typeof(void)),
 			};
 
 		[Flags]
@@ -36,6 +38,7 @@ namespace InputResender.Definitions.Networking {
 		public abstract IReadOnlyList<IReadOnlyList<INetPoint>> EPList { get; }
 		public abstract IReadOnlyCollection<(string msg, Exception e)> Errors { get; }
 		public abstract int Connections { get; }
+		public int Verbosity { get; set; } = 0;
 		public abstract INetPoint OwnEP ( int TTL, int network );
 		public abstract void Connect ( INetPoint ep, bool canReconnect = false );
 		public abstract void Disconnect ( INetPoint ep );

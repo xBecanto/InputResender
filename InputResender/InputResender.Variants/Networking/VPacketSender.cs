@@ -73,7 +73,8 @@ namespace InputResender.Variants.Networking {
 					if ( Clients.OwnedDevices.Keys.Any ( ep => node.Equals ( ep ) ) ) continue;
 					try {
 						Clients.AddEP ( node );
-						Owner.Fetch<DLogger> ()?.Log ( $"Added {node} '{node.DscName}' as a valid local EP" );
+						if ( Verbosity > 0 )
+							Owner.Fetch<DLogger> ()?.Log ( $"Added {node} '{node.DscName}' as a valid local EP" );
 					} catch ( Exception e ) {
 						PrintError ( $"Failed to add {node} as a valid local EP", e );
 					}
@@ -165,7 +166,7 @@ namespace InputResender.Variants.Networking {
 		}
 		public override void Recv ( NetMessagePacket data ) => throw new NotImplementedException ();
 		public override void Send ( HMessageHolder data ) {
-			if ( Owner.LogFcn != null ) {
+			if ( Owner.LogFcn != null && Verbosity > 1 ) {
 				System.Text.StringBuilder SB = new ();
 				SB.AppendLine ( $"Sending data[{data.Size}]" );
 				foreach ( var conn in ActiveConns ) SB.AppendLine ( $"  {conn.Value}" );

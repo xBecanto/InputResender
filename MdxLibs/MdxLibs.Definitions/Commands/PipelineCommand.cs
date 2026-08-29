@@ -56,11 +56,11 @@ public class PipelineCommand : DCommand_CoreBase {
 			joiner.UnregisterPipeline ( selected.obj.key );
 			CreatedPipelines.RemoveAt ( selected.id );
 			foreach ( var ui in RegisteredUIs ) ui.NotifyDataChanged ();
-			return new CommandResult ( $"Removed pipeline [{selected.id}] {selected.obj.name} ({selected.obj.dsc})." );
+			return new ( $"Removed pipeline [{selected.id}] {selected.obj.name} ({selected.obj.dsc})." );
 		}
 		case "new": {
 			string name = context.Args.String ( context.ArgID + 1, "Name" );
-			if ( string.IsNullOrEmpty ( name ) ) return new CommandResult ( "Name cannot be empty." );
+			if ( string.IsNullOrEmpty ( name ) ) return new ErrorCommandResult ( "Name cannot be empty." );
 
 			var core = GetActiveCore<CoreBase> ();
 			var joiner = core.Fetch<DComponentJoiner> ();
@@ -69,18 +69,21 @@ public class PipelineCommand : DCommand_CoreBase {
 			string desc = "";
 			for ( int i = context.ArgID + 2; i < context.Args.ArgC; i++ ) {
 				string cName = context.Args.String ( i, out string spec, "Component name", 1, true ); // No other arguments after 'Name'
-				selectors.Add ( CreateSelector ( cName, spec, core ) );
+				try { selectors.Add ( CreateSelector ( cName, spec, core ) ); }
+				catch ( Exception ex ) {
+					return new ErrorCommandResult ( new ( $"Failed to create selector for component '{cName}' with spec '{spec}'." ), ex );
+				}
 				desc += (desc.Length > 0 ? ", " : string.Empty) + cName;
 				if ( !string.IsNullOrWhiteSpace ( spec ) ) desc += '=' + spec;
 			}
 
 			if ( selectors.Count < 2 )
-				return new CommandResult ( "At least two components are required to create a pipeline." );
+				return new ErrorCommandResult ( "At least two components are required to create a pipeline." );
 
 			var pipelineId = joiner.RegisterPipeline ( selectors.ToArray () );
 			CreatedPipelines.Add ( (pipelineId, name, desc) );
 			foreach ( var ui in RegisteredUIs ) ui.NotifyDataChanged ();
-			return new CommandResult ( $"Created pipeline '{name}' with ID {CreatedPipelines.Count - 1} ({desc})." );
+			return new ( $"Created pipeline '{name}' with ID {CreatedPipelines.Count - 1} ({desc})." );
 		}
 		case "expand": {
 			var selected = FindElement ( context, context.ArgID + 1, CreatedPipelines, ( id, x ) => id == x.name

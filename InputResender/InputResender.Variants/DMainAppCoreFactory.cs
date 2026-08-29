@@ -119,6 +119,7 @@ public class DInputResenderCoreFactory {
 			bool accepts = shouldPassOver switch{
 				DHookManager.ConsumingStatus.Consume     => true,
 				DHookManager.ConsumingStatus.Passthrough => true,
+				DHookManager.ConsumingStatus.Skip 	     => true,
 				_                                        => false
 			};
 			return (accepts, shouldPassOver);

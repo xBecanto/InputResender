@@ -134,6 +134,8 @@ public class VTapperInputCommand : DCommand_IRCore {
 		case "verbosity": {
 			int verbosity = context.Args.Int ( context.ArgID + 1, "Verbosity level", true ).Value;
 			var tapperProcessor = core.Fetch<VTapperInput> ();
+			if ( tapperProcessor == null )
+				return new ( "Input Processor is not a VTapperInput." );
 			tapperProcessor.Verbose = verbosity > 0;
 			return new ( $"Verbosity set to {tapperProcessor.Verbose}." );
 		}

@@ -47,7 +47,7 @@ public class TargetManagerCommand : DCommand_IRCore {
 	public override string Description => "Target management";
 
 	private static List<string> CommandNames = ["target", "tEP"];
-	private static List<(string, System.Type)> InterCommands = [("set", null)];
+	private static List<(string, System.Type)> InterCommands = [("set", null), ("verbosity", null)];
 
 	public TargetManagerCommand ( DInputResenderCore owner, DCommand_IRCore parent = null )
 		: base ( owner, parent?.CallName, CommandNames, InterCommands ) { }
@@ -94,6 +94,13 @@ public class TargetManagerCommand : DCommand_IRCore {
 					return new ( $"Failed to connect to InMemNet point {INMEP}: {e.Message}" );
 				}
 			} else return new ( $"Provided target '{context[1]}' is not a valid end point." );
+		case "verbosity": {
+			if ( int.TryParse ( context[1, "Verbosity"], out int verbosity ) ) {
+				core.PacketSender.Verbosity = verbosity;
+				return new ($"Verbosity set to {verbosity}.");
+			} else
+				return new ($"Invalid verbosity value '{context[1]}'.");
+		}
 		default:
 			return new ( "Missing or unknown subcommand." );
 		}
